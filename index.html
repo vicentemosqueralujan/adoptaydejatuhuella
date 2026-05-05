@@ -9,9 +9,27 @@
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
 </head>
 <body>
+    <!-- Capa de bloqueo para el Login -->
+    <div id="loginOverlay" class="login-overlay">
+        <div class="card login-card">
+            <i class="fa-solid fa-shield-dog" style="font-size: 3rem; color: #4361ee; margin-bottom: 1rem;"></i>
+            <h2>Acceso Administrativo</h2>
+            <form id="loginForm" class="admin-form">
+                <input type="email" id="loginEmail" placeholder="Email" required>
+                <input type="password" id="loginPass" placeholder="Contraseña" required>
+                <button type="submit" class="btn-add">Entrar al Panel</button>
+            </form>
+        </div>
+    </div>
+
     <header>
-        <h1>🐾 Panel Administrativo</h1>
-        <p>Gestión integral de la protectora</p>
+        <div class="header-content">
+            <h1>🐾 Panel Administrativo</h1>
+            <p>Gestión integral de la protectora</p>
+        </div>
+        <button onclick="logout()" class="btn-logout" title="Cerrar Sesión">
+            <i class="fa-solid fa-right-from-bracket"></i>
+        </button>
     </header>
 
     <main class="dashboard-grid">

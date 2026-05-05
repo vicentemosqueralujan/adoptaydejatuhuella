@@ -5,7 +5,8 @@
   "description": "Sistema CRUD para protectora de animales",
   "main": "scripts.js",
   "dependencies": {
-    "@vercel/postgres": "^0.10.0"
+    "@vercel/postgres": "^0.10.0",
+    "bcryptjs": "^3.0.3"
   },
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1"
