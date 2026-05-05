@@ -1,1 +1,11 @@
-@
+:root { --primary: #2c3e50; --accent: #3498db; --bg: #f4f7f6; }
+body { font-family: 'Segoe UI', sans-serif; background: var(--bg); margin: 0; padding: 20px; }
+header { text-align: center; color: var(--primary); margin-bottom: 30px; }
+main { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 20px; max-width: 1200px; margin: auto; }
+.card { background: white; padding: 20px; border-radius: 12px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
+input, select, button { width: 100%; padding: 10px; margin: 5px 0; border: 1px solid #ddd; border-radius: 6px; box-sizing: border-box; }
+button { background: var(--accent); color: white; border: none; cursor: pointer; font-weight: bold; }
+button:hover { opacity: 0.9; }
+.data-list { list-style: none; padding: 0; margin-top: 15px; }
+.data-list li { padding: 10px; border-bottom: 1px solid #eee; font-size: 0.9em; display: flex; justify-content: space-between; }
+.delete-btn { background: #e74c3c; width: auto; padding: 5px 10px; font-size: 0.8em; }
