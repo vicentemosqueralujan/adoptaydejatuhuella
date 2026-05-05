@@ -1,5 +1,5 @@
 // ==========================================
-// 1. SISTEMA DE SESIÓN Y LOGIN
+// 1. SISTEMA DE SESIÓN Y LOGIN ROBUSTO
 // ==========================================
 const loginOverlay = document.getElementById('loginOverlay');
 const loginForm = document.getElementById('loginForm');
@@ -11,11 +11,16 @@ if (session) {
     cargarTodo();
 }
 
-// Manejo del formulario de Login
 loginForm.onsubmit = async (e) => {
-    e.preventDefault();
+    e.preventDefault(); // Detiene el envío y las validaciones nativas
+    
     const emailInput = document.getElementById('loginEmail');
     const passInput = document.getElementById('loginPass');
+    const submitBtn = e.target.querySelector('button');
+
+    // Bloqueamos el botón para evitar múltiples clics
+    submitBtn.disabled = true;
+    submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Verificando...';
 
     try {
         const res = await fetch('/api/login', {
@@ -28,33 +33,42 @@ loginForm.onsubmit = async (e) => {
         const data = await res.json();
 
         if (data.success) {
-            // LOGIN EXITOSO
             localStorage.setItem('adminSession', JSON.stringify(data.user));
             
+            // Éxito: Damos un tiempo para que el usuario vea el mensaje antes de ocultar el login
             await Swal.fire({
-                title: `¡Bienvenido, ${data.user.nombre}!`,
-                text: 'Acceso concedido al panel de gestión.',
+                title: '¡Acceso Correcto!',
+                text: `Bienvenido al panel, ${data.user.nombre}`,
                 icon: 'success',
-                timer: 2000,
-                showConfirmButton: false
+                timer: 1500,
+                showConfirmButton: false,
+                allowOutsideClick: false
             });
 
-            loginOverlay.style.display = 'none';
-            cargarTodo();
+            loginOverlay.classList.add('hidden-fade'); // Transición suave
+            setTimeout(() => {
+                loginOverlay.style.display = 'none';
+                cargarTodo();
+            }, 500);
+
         } else {
-            // LOGIN FALLIDO
+            // Error: Limpiamos contraseña pero mantenemos el email para corregir
             await Swal.fire({
-                title: 'Acceso Denegado',
-                text: data.message || 'El email o la contraseña no son correctos.',
+                title: 'Fallo de Autenticación',
+                text: 'El email o la contraseña no coinciden con nuestros registros.',
                 icon: 'error',
-                confirmButtonColor: '#4361ee'
+                confirmButtonColor: '#4361ee',
+                confirmButtonText: 'Reintentar'
             });
 
-            loginForm.reset(); 
-            emailInput.focus(); 
+            passInput.value = ''; // Borra solo la clave
+            passInput.focus();
         }
     } catch (err) {
-        Swal.fire('Error de Conexión', 'No se ha podido validar el acceso.', 'warning');
+        Swal.fire('Error', 'Hubo un problema con el servidor.', 'warning');
+    } finally {
+        submitBtn.disabled = false;
+        submitBtn.innerText = 'Entrar al Panel';
     }
 };
 
@@ -64,23 +78,15 @@ function logout() {
 }
 
 // ==========================================
-// 2. UTILIDADES Y NOTIFICACIONES
+// 2. UTILIDADES Y CARGA DE DATOS (RESTA DEL CÓDIGO)
 // ==========================================
 function mostrarToast(titulo, icono = 'success') {
     Swal.fire({
-        title: titulo,
-        icon: icono,
-        toast: true,
-        position: 'top-end',
-        showConfirmButton: false,
-        timer: 2000,
-        timerProgressBar: true
+        title: titulo, icon: icono, toast: true, position: 'top-end',
+        showConfirmButton: false, timer: 2000, timerProgressBar: true
     });
 }
 
-// ==========================================
-// 3. CARGA DE DATOS (READ)
-// ==========================================
 async function cargarTodo() {
     cargarProtectoras();
     cargarUsuarios();
@@ -90,24 +96,16 @@ async function cargarTodo() {
 async function cargarProtectoras() {
     const res = await fetch('/api/protectoras');
     const data = await res.json();
-    const lista = document.getElementById('listaProtectoras');
-    const select = document.getElementById('selectProtectora');
-    
-    lista.innerHTML = data.map(p => `
+    document.getElementById('listaProtectoras').innerHTML = data.map(p => `
         <li class="item-lista">
             <span>${p.nombre_protectora}</span>
             <div class="actions">
-                <button onclick="editarNombre('protectoras', ${p.id_protectora}, '${p.nombre_protectora}')" class="btn-action btn-edit">
-                    <i class="fa-solid fa-pen"></i>
-                </button>
-                <button onclick="eliminar('protectoras', ${p.id_protectora})" class="btn-action btn-del">
-                    <i class="fa-solid fa-trash"></i>
-                </button>
+                <button onclick="editarNombre('protectoras', ${p.id_protectora}, '${p.nombre_protectora}')" class="btn-action btn-edit"><i class="fa-solid fa-pen"></i></button>
+                <button onclick="eliminar('protectoras', ${p.id_protectora})" class="btn-action btn-del"><i class="fa-solid fa-trash"></i></button>
             </div>
         </li>
     `).join('');
-    
-    select.innerHTML = data.map(p => `<option value="${p.id_protectora}">${p.nombre_protectora}</option>`).join('');
+    document.getElementById('selectProtectora').innerHTML = data.map(p => `<option value="${p.id_protectora}">${p.nombre_protectora}</option>`).join('');
 }
 
 async function cargarUsuarios() {
@@ -117,12 +115,8 @@ async function cargarUsuarios() {
         <li class="item-lista">
             <span>${u.nombre_usuario} (<b>${u.tipo_usuario}</b>)</span>
             <div class="actions">
-                <button onclick="editarNombre('usuarios', ${u.id_usuario}, '${u.nombre_usuario}')" class="btn-action btn-edit">
-                    <i class="fa-solid fa-pen"></i>
-                </button>
-                <button onclick="eliminar('usuarios', ${u.id_usuario})" class="btn-action btn-del">
-                    <i class="fa-solid fa-user-xmark"></i>
-                </button>
+                <button onclick="editarNombre('usuarios', ${u.id_usuario}, '${u.nombre_usuario}')" class="btn-action btn-edit"><i class="fa-solid fa-pen"></i></button>
+                <button onclick="eliminar('usuarios', ${u.id_usuario})" class="btn-action btn-del"><i class="fa-solid fa-user-xmark"></i></button>
             </div>
         </li>
     `).join('');
@@ -135,23 +129,14 @@ async function cargarAnimales() {
         <li class="item-lista">
             <span><b>${a.nombre_animal}</b> - <i>${a.estado}</i></span>
             <div class="actions">
-                <button onclick="editarNombre('animales', ${a.id_animal}, '${a.nombre_animal}')" class="btn-action btn-edit" style="background:#e0f2fe; color:#0369a1">
-                    <i class="fa-solid fa-pen"></i>
-                </button>
-                <button onclick="toggleEstado(${a.id_animal}, '${a.estado}')" class="btn-action btn-edit" title="Cambiar estado">
-                    <i class="fa-solid fa-rotate"></i>
-                </button>
-                <button onclick="eliminar('animales', ${a.id_animal})" class="btn-action btn-del">
-                    <i class="fa-solid fa-trash-can"></i>
-                </button>
+                <button onclick="editarNombre('animales', ${a.id_animal}, '${a.nombre_animal}')" class="btn-action btn-edit" style="background:#e0f2fe; color:#0369a1"><i class="fa-solid fa-pen"></i></button>
+                <button onclick="toggleEstado(${a.id_animal}, '${a.estado}')" class="btn-action btn-edit"><i class="fa-solid fa-rotate"></i></button>
+                <button onclick="eliminar('animales', ${a.id_animal})" class="btn-action btn-del"><i class="fa-solid fa-trash-can"></i></button>
             </div>
         </li>
     `).join('');
 }
 
-// ==========================================
-// 4. ACCIONES DE ACTUALIZAR Y ELIMINAR (UPDATE / DELETE)
-// ==========================================
 async function editarNombre(entidad, id, nombreActual) {
     const { value: nuevoNombre } = await Swal.fire({
         title: 'Editar nombre',
@@ -161,84 +146,47 @@ async function editarNombre(entidad, id, nombreActual) {
         confirmButtonColor: '#4361ee',
         inputValidator: (value) => !value && 'El nombre es obligatorio'
     });
-
     if (nuevoNombre && nuevoNombre !== nombreActual) {
-        await fetch(`/api/${entidad}?id=${id}`, {
-            method: 'PATCH',
-            body: JSON.stringify({ nombre: nuevoNombre })
-        });
+        await fetch(`/api/${entidad}?id=${id}`, { method: 'PATCH', body: JSON.stringify({ nombre: nuevoNombre }) });
         mostrarToast('Nombre actualizado');
         cargarTodo();
     }
 }
 
 async function eliminar(entidad, id) {
-    const result = await Swal.fire({
-        title: '¿Estás seguro?',
-        text: "Esta acción no se puede deshacer.",
-        icon: 'warning',
-        showCancelButton: true,
-        confirmButtonColor: '#ef233c',
-        cancelButtonColor: '#adb5bd',
-        confirmButtonText: 'Sí, eliminar',
-        cancelButtonText: 'Cancelar'
-    });
-
+    const result = await Swal.fire({ title: '¿Borrar?', icon: 'warning', showCancelButton: true, confirmButtonColor: '#ef233c' });
     if (result.isConfirmed) {
         await fetch(`/api/${entidad}?id=${id}`, { method: 'DELETE' });
-        mostrarToast('Eliminado correctamente');
+        mostrarToast('Eliminado');
         cargarTodo();
     }
 }
 
 async function toggleEstado(id, actual) {
     const nuevo = actual === 'Disponible' ? 'Adoptado' : 'Disponible';
-    await fetch(`/api/animales?id=${id}`, {
-        method: 'PATCH',
-        body: JSON.stringify({ estado: nuevo })
-    });
+    await fetch(`/api/animales?id=${id}`, { method: 'PATCH', body: JSON.stringify({ estado: nuevo }) });
     mostrarToast('Estado actualizado');
     cargarAnimales();
 }
 
-// ==========================================
-// 5. REGISTRO DE DATOS (CREATE)
-// ==========================================
 document.querySelectorAll('form:not(#loginForm)').forEach(form => {
     form.onsubmit = async (e) => {
         e.preventDefault();
         const id = e.target.id;
-        let body = {};
-        let url = '';
-
+        let body = {}, url = '';
         if (id === 'animalForm') {
             url = '/api/animales';
-            body = { 
-                nombre: document.getElementById('nombre').value, 
-                especie: document.getElementById('especie').value, 
-                edad: document.getElementById('edad').value, 
-                id_protectora: document.getElementById('selectProtectora').value 
-            };
+            body = { nombre: document.getElementById('nombre').value, especie: document.getElementById('especie').value, edad: document.getElementById('edad').value, id_protectora: document.getElementById('selectProtectora').value };
         } else if (id === 'formProtectora') {
             url = '/api/protectoras';
-            body = { 
-                nombre: document.getElementById('p_nombre').value, 
-                ubicacion: document.getElementById('p_ubicacion').value 
-            };
+            body = { nombre: document.getElementById('p_nombre').value, ubicacion: document.getElementById('p_ubicacion').value };
         } else if (id === 'formUsuario') {
             url = '/api/usuarios';
-            body = { 
-                nombre: document.getElementById('u_nombre').value, 
-                email: document.getElementById('u_email').value, 
-                tipo: document.getElementById('u_tipo').value 
-            };
+            body = { nombre: document.getElementById('u_nombre').value, email: document.getElementById('u_email').value, tipo: document.getElementById('u_tipo').value };
         }
-
-        const res = await fetch(url, { method: 'POST', body: JSON.stringify(body) });
-        if (res.ok) {
-            e.target.reset(); // Limpia campos tras éxito
-            mostrarToast('Registrado correctamente');
-            cargarTodo();
-        }
+        await fetch(url, { method: 'POST', body: JSON.stringify(body) });
+        e.target.reset();
+        mostrarToast('Registrado');
+        cargarTodo();
     };
 });

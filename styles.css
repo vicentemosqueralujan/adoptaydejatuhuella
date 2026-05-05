@@ -107,11 +107,20 @@ input:focus { border-color: var(--primary); }
     left: 0;
     width: 100%;
     height: 100%;
-    background-color: var(--bg); /* Fondo sólido para ocultar el dashboard */
+    background-color: var(--bg);
     display: flex;
     justify-content: center;
     align-items: center;
-    z-index: 9999; /* Por encima de todo */
+    z-index: 9999;
+    /* Animación de entrada/salida más lenta y suave */
+    transition: opacity 0.8s cubic-bezier(0.4, 0, 0.2, 1), visibility 0.8s;
+}
+
+/* Clase para el desvanecimiento suave tras el success */
+.hidden-fade {
+    opacity: 0;
+    visibility: hidden;
+    pointer-events: none;
 }
 
 .login-card {
@@ -122,6 +131,13 @@ input:focus { border-color: var(--primary); }
     background: var(--card-bg);
     border-radius: 20px;
     box-shadow: 0 20px 50px rgba(0,0,0,0.1);
+    /* Animación sutil de entrada para la tarjeta */
+    animation: slideUp 1s ease-out;
+}
+
+@keyframes slideUp {
+    from { transform: translateY(20px); opacity: 0; }
+    to { transform: translateY(0); opacity: 1; }
 }
 
 .login-card h2 {
@@ -130,7 +146,7 @@ input:focus { border-color: var(--primary); }
     font-size: 1.5rem;
 }
 
-/* --- AJUSTES DEL HEADER (Para el botón Logout) --- */
+/* --- AJUSTES DEL HEADER --- */
 header {
     display: flex;
     justify-content: space-between;
@@ -153,7 +169,8 @@ header {
     border-radius: 12px;
     cursor: pointer;
     font-size: 1.2rem;
-    transition: all 0.3s ease;
+    /* Transición más lenta para el hover */
+    transition: all 0.5s cubic-bezier(0.4, 0, 0.2, 1);
     display: flex;
     align-items: center;
     justify-content: center;
@@ -162,7 +179,7 @@ header {
 .btn-logout:hover {
     background: var(--danger);
     color: white;
-    transform: scale(1.05);
+    transform: scale(1.1) rotate(5deg);
 }
 
 /* --- MEJORAS EN LAS LISTAS DE DATOS --- */
@@ -181,12 +198,14 @@ header {
     border-radius: 10px;
     margin-bottom: 8px;
     border: 1px solid #f1f5f9;
-    transition: 0.2s;
+    /* Transición suave para la interacción */
+    transition: all 0.4s ease;
 }
 
 .item-lista:hover {
     border-color: var(--primary);
     background: #f8faff;
+    transform: translateX(5px);
 }
 
 /* Colores específicos para iconos de acción */
@@ -198,4 +217,11 @@ header {
 .btn-user-xmark:hover {
     background: var(--danger);
     color: white;
+}
+
+/* Estado deshabilitado del botón durante el 'Verificando...' */
+button:disabled {
+    opacity: 0.6;
+    cursor: wait;
+    filter: grayscale(0.5);
 }
