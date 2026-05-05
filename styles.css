@@ -308,3 +308,46 @@ header {
     .dashboard-grid { padding: 1rem; gap: 1rem; }
     .login-card { margin: 1rem; padding: 2rem 1.5rem; }
 }
+
+/* =============================================
+   OJITO — TOGGLE CONTRASEÑA
+   ============================================= */
+.input-group { position: relative; }
+
+.btn-eye {
+    position: absolute;
+    right: 12px; top: 50%;
+    transform: translateY(-50%);
+    background: none; border: none;
+    color: #94a3b8; cursor: pointer;
+    font-size: 0.9rem; padding: 4px;
+    transition: color 0.2s;
+    line-height: 1;
+}
+.btn-eye:hover { color: var(--primary); }
+
+/* Que el input no quede tapado por el ojo */
+.input-group input[type="password"],
+.input-group input[type="text"] {
+    padding-right: 40px;
+}
+
+/* =============================================
+   BOTÓN EDITAR
+   ============================================= */
+.btn-group {
+    display: flex;
+    gap: 6px;
+    flex-shrink: 0;
+}
+
+.btn-edit {
+    width: 32px; height: 32px;
+    background: #eff6ff;
+    color: #3b82f6;
+    border: none; border-radius: var(--radius-sm);
+    cursor: pointer; font-size: 0.75rem;
+    transition: all 0.2s;
+    display: flex; align-items: center; justify-content: center;
+}
+.btn-edit:hover { background: #3b82f6; color: white; }

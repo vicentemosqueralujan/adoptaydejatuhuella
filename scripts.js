@@ -2,7 +2,7 @@
 // CONFIGURACIÓN Y SELECTORES
 // ==========================================
 const loginOverlay = document.getElementById('loginOverlay');
-const btnEntrar = document.getElementById('btnEntrar');
+const btnEntrar    = document.getElementById('btnEntrar');
 
 // Verificación inmediata de sesión al cargar
 if (localStorage.getItem('adminSession')) {
@@ -11,11 +11,25 @@ if (localStorage.getItem('adminSession')) {
 }
 
 // ==========================================
+// TOGGLE OJO CONTRASEÑA
+// ==========================================
+document.getElementById('togglePass')?.addEventListener('click', () => {
+    const input = document.getElementById('loginPass');
+    const icon  = document.querySelector('#togglePass i');
+    if (input.type === 'password') {
+        input.type = 'text';
+        icon.classList.replace('fa-eye', 'fa-eye-slash');
+    } else {
+        input.type = 'password';
+        icon.classList.replace('fa-eye-slash', 'fa-eye');
+    }
+});
+
+// ==========================================
 // SISTEMA DE LOGIN
 // ==========================================
 if (btnEntrar) {
     btnEntrar.addEventListener('click', handleLogin);
-
     ['loginEmail', 'loginPass'].forEach(id => {
         document.getElementById(id)?.addEventListener('keydown', e => {
             if (e.key === 'Enter') handleLogin();
@@ -51,31 +65,32 @@ async function handleLogin() {
             throw new Error(data.message || 'Credenciales incorrectas');
         }
 
-        // ✅ SESIÓN EXITOSA — guardar y animar entrada
+        // SESIÓN EXITOSA
         localStorage.setItem('adminSession', JSON.stringify(data.user));
-
         btnEntrar.style.background = '#10b981';
         btnEntrar.innerHTML = '<i class="fas fa-check"></i> ¡Bienvenido, ' + data.user.nombre + '!';
 
         await Swal.fire({
             title: '¡Acceso concedido!',
-            text: `Bienvenido de nuevo, ${data.user.nombre}`,
+            text: 'Bienvenido de nuevo, ' + data.user.nombre,
             icon: 'success',
             timer: 1400,
             showConfirmButton: false,
-            timerProgressBar: true,
-            confirmButtonColor: '#4361ee'
+            timerProgressBar: true
         });
 
         loginOverlay.style.transition = 'opacity 0.4s ease';
         loginOverlay.style.opacity = '0';
-        setTimeout(() => {
-            loginOverlay.style.display = 'none';
-            cargarTodo();
-        }, 400);
+        setTimeout(() => { loginOverlay.style.display = 'none'; cargarTodo(); }, 400);
 
     } catch (error) {
         console.error('[Login Error]', error.message);
+
+        // Shake + popup simultáneos
+        const card = document.querySelector('.login-card');
+        card?.classList.add('shake');
+        setTimeout(() => card?.classList.remove('shake'), 500);
+
         Swal.fire({
             title: 'Acceso denegado',
             text: error.message,
@@ -83,12 +98,9 @@ async function handleLogin() {
             confirmButtonColor: '#4361ee',
             confirmButtonText: 'Intentar de nuevo'
         });
+
         btnEntrar.disabled = false;
         btnEntrar.innerHTML = originalHTML;
-
-        // Shake animation en el card
-        document.querySelector('.login-card')?.classList.add('shake');
-        setTimeout(() => document.querySelector('.login-card')?.classList.remove('shake'), 500);
     }
 }
 
@@ -121,10 +133,18 @@ async function cargarProtectoras() {
             lista.innerHTML = data.length
                 ? data.map(p => `
                     <li class="item-lista">
-                        <span><i class="fa-solid fa-house-chimney" style="color:#4361ee;margin-right:8px"></i>${p.nombre_protectora}</span>
-                        <button onclick="eliminar('protectoras', ${p.id_protectora})" class="btn-del" title="Eliminar">
-                            <i class="fa-solid fa-trash"></i>
-                        </button>
+                        <span>
+                            <i class="fa-solid fa-house-chimney" style="color:#4361ee;margin-right:8px"></i>
+                            ${p.nombre_protectora}
+                        </span>
+                        <div class="btn-group">
+                            <button onclick="editar('protectoras', ${p.id_protectora}, ${JSON.stringify(p.nombre_protectora)})" class="btn-edit" title="Editar">
+                                <i class="fa-solid fa-pen"></i>
+                            </button>
+                            <button onclick="eliminar('protectoras', ${p.id_protectora})" class="btn-del" title="Eliminar">
+                                <i class="fa-solid fa-trash"></i>
+                            </button>
+                        </div>
                     </li>`).join('')
                 : '<li class="empty-state"><i class="fa-solid fa-inbox"></i> Sin registros</li>';
         }
@@ -149,9 +169,14 @@ async function cargarUsuarios() {
                             ${u.nombre_usuario}
                             <span class="badge badge-${u.tipo_usuario.toLowerCase()}">${u.tipo_usuario}</span>
                         </span>
-                        <button onclick="eliminar('usuarios', ${u.id_usuario})" class="btn-del" title="Eliminar">
-                            <i class="fa-solid fa-user-xmark"></i>
-                        </button>
+                        <div class="btn-group">
+                            <button onclick="editar('usuarios', ${u.id_usuario}, ${JSON.stringify(u.nombre_usuario)})" class="btn-edit" title="Editar">
+                                <i class="fa-solid fa-pen"></i>
+                            </button>
+                            <button onclick="eliminar('usuarios', ${u.id_usuario})" class="btn-del" title="Eliminar">
+                                <i class="fa-solid fa-user-xmark"></i>
+                            </button>
+                        </div>
                     </li>`).join('')
                 : '<li class="empty-state"><i class="fa-solid fa-inbox"></i> Sin registros</li>';
         }
@@ -172,13 +197,57 @@ async function cargarAnimales() {
                             <b>${a.nombre_animal}</b>
                             <span class="badge badge-${a.estado === 'Disponible' ? 'disponible' : 'adoptado'}">${a.estado}</span>
                         </span>
-                        <button onclick="eliminar('animales', ${a.id_animal})" class="btn-del" title="Eliminar">
-                            <i class="fa-solid fa-trash-can"></i>
-                        </button>
+                        <div class="btn-group">
+                            <button onclick="editar('animales', ${a.id_animal}, ${JSON.stringify(a.nombre_animal)})" class="btn-edit" title="Editar">
+                                <i class="fa-solid fa-pen"></i>
+                            </button>
+                            <button onclick="eliminar('animales', ${a.id_animal})" class="btn-del" title="Eliminar">
+                                <i class="fa-solid fa-trash-can"></i>
+                            </button>
+                        </div>
                     </li>`).join('')
                 : '<li class="empty-state"><i class="fa-solid fa-inbox"></i> Sin registros</li>';
         }
     } catch (e) { console.error('[cargarAnimales]', e.message); }
+}
+
+// ==========================================
+// EDITAR (PATCH)
+// ==========================================
+async function editar(entidad, id, nombreActual) {
+    const etiquetas = { animales: 'animal', protectoras: 'protectora', usuarios: 'usuario' };
+
+    const { value: nuevoNombre } = await Swal.fire({
+        title: 'Editar ' + etiquetas[entidad],
+        input: 'text',
+        inputLabel: 'Nuevo nombre',
+        inputValue: nombreActual,
+        showCancelButton: true,
+        cancelButtonText: 'Cancelar',
+        confirmButtonText: 'Guardar cambios',
+        confirmButtonColor: '#4361ee',
+        inputValidator: v => !v.trim() && 'El nombre no puede estar vacío'
+    });
+
+    if (!nuevoNombre || nuevoNombre.trim() === nombreActual) return;
+
+    try {
+        const res = await fetch(`/api/${entidad}?id=${id}`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ nombre: nuevoNombre.trim() })
+        });
+
+        if (res.ok) {
+            await cargarTodo();
+            Swal.fire({ title: '¡Actualizado!', icon: 'success', toast: true, position: 'top-end', timer: 2000, showConfirmButton: false });
+        } else {
+            const err = await res.json();
+            Swal.fire('Error', err.error || 'No se pudo actualizar', 'error');
+        }
+    } catch (e) {
+        Swal.fire('Error de red', e.message, 'error');
+    }
 }
 
 // ==========================================
@@ -219,9 +288,9 @@ document.querySelectorAll('form').forEach(form => {
         if (formId === 'animalForm') {
             url  = '/api/animales';
             body = {
-                nombre:       document.getElementById('nombre').value,
-                especie:      document.getElementById('especie').value,
-                edad:         document.getElementById('edad').value || null,
+                nombre:        document.getElementById('nombre').value,
+                especie:       document.getElementById('especie').value,
+                edad:          document.getElementById('edad').value || null,
                 id_protectora: document.getElementById('selectProtectora').value
             };
         } else if (formId === 'formProtectora') {
