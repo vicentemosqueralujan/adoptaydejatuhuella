@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard - Adopta y Deja tu Huella</title>
+    <link rel="stylesheet" href="styles.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+</head>
+<body>
+    <!-- Capa de Login Blindada -->
+    <div id="loginOverlay" class="login-overlay">
+        <div class="login-card">
+            <div class="login-header">
+                <i class="fa-solid fa-user-shield"></i>
+                <h2>Panel de Control</h2>
+                <p>Introduce tus credenciales administrativas</p>
+            </div>
+            <div class="login-body">
+                <div class="input-group">
+                    <input type="email" id="loginEmail" placeholder="Correo electrónico" autocomplete="off">
+                </div>
+                <div class="input-group">
+                    <input type="password" id="loginPass" placeholder="Contraseña">
+                </div>
+                <button id="btnEntrar" class="btn-login">
+                    <span>Entrar al Panel</span>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <header>
+        <div class="header-content">
+            <h1>🐾 Panel Administrativo</h1>
+            <p>Gestión integral de la protectora</p>
+        </div>
+        <button onclick="logout()" class="btn-logout" title="Cerrar Sesión">
+            <i class="fa-solid fa-right-from-bracket"></i>
+        </button>
+    </header>
+
+    <main class="dashboard-grid">
+        <!-- SECCIÓN PROTECTORAS -->
+        <section class="card">
+            <h2>🏢 Protectoras</h2>
+            <form id="formProtectora" class="admin-form">
+                <input type="text" id="p_nombre" placeholder="Nombre Protectora" required>
+                <input type="text" id="p_ubicacion" placeholder="Ubicación">
+                <button type="submit" class="btn-add">Registrar</button>
+            </form>
+            <ul id="listaProtectoras" class="data-list"></ul>
+        </section>
+
+        <!-- SECCIÓN USUARIOS -->
+        <section class="card">
+            <h2>👤 Usuarios</h2>
+            <form id="formUsuario" class="admin-form">
+                <input type="text" id="u_nombre" placeholder="Nombre" required>
+                <input type="email" id="u_email" placeholder="Email" required>
+                <select id="u_tipo">
+                    <option value="Adoptante">Adoptante</option>
+                    <option value="Admin">Admin</option>
+                </select>
+                <button type="submit" class="btn-add">Crear</button>
+            </form>
+            <ul id="listaUsuarios" class="data-list"></ul>
+        </section>
+
+        <!-- SECCIÓN ANIMALES -->
+        <section class="card">
+            <h2>🐕 Animales</h2>
+            <form id="animalForm" class="admin-form">
+                <input type="text" id="nombre" placeholder="Nombre" required>
+                <input type="text" id="especie" placeholder="Especie" required>
+                <input type="number" id="edad" placeholder="Edad">
+                <select id="selectProtectora" required></select>
+                <button type="submit" class="btn-add">Dar de alta</button>
+            </form>
+            <ul id="listaAnimales" class="data-list"></ul>
+        </section>
+    </main>
+    <script src="scripts.js"></script>
+</body>
+</html>
