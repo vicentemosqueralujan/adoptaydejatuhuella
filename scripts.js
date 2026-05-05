@@ -1,74 +1,85 @@
 // ==========================================
-// 1. SISTEMA DE SESIÓN Y LOGIN ROBUSTO
+// 1. SISTEMA DE LOGIN BLINDADO (UX PRO)
 // ==========================================
 const loginOverlay = document.getElementById('loginOverlay');
 const loginForm = document.getElementById('loginForm');
 
 // Verificar sesión al cargar la página
-const session = localStorage.getItem('adminSession');
-if (session) {
+if (localStorage.getItem('adminSession')) {
     loginOverlay.style.display = 'none';
     cargarTodo();
 }
 
 loginForm.onsubmit = async (e) => {
-    e.preventDefault(); // Detiene el envío y las validaciones nativas
+    e.preventDefault();
     
     const emailInput = document.getElementById('loginEmail');
     const passInput = document.getElementById('loginPass');
     const submitBtn = e.target.querySelector('button');
 
-    // Bloqueamos el botón para evitar múltiples clics
+    // Feedback visual inmediato: deshabilitar para evitar doble clic
     submitBtn.disabled = true;
-    submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Verificando...';
+    submitBtn.innerHTML = '<i class="fas fa-circle-notch fa-spin"></i> Comprobando...';
 
     try {
         const res = await fetch('/api/login', {
             method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ 
                 email: emailInput.value, 
                 password: passInput.value 
             })
         });
+
+        // Capturar errores de servidor o base de datos
+        if (!res.ok && res.status !== 401) throw new Error('Error en el servidor');
+
         const data = await res.json();
 
         if (data.success) {
+            // LOGIN EXITOSO: Guardar sesión y mostrar éxito
             localStorage.setItem('adminSession', JSON.stringify(data.user));
             
-            // Éxito: Damos un tiempo para que el usuario vea el mensaje antes de ocultar el login
             await Swal.fire({
                 title: '¡Acceso Correcto!',
-                text: `Bienvenido al panel, ${data.user.nombre}`,
+                text: `Bienvenido, ${data.user.nombre}`,
                 icon: 'success',
                 timer: 1500,
                 showConfirmButton: false,
                 allowOutsideClick: false
             });
 
-            loginOverlay.classList.add('hidden-fade'); // Transición suave
+            // Transición suave de salida
+            loginOverlay.style.transition = "opacity 0.8s ease";
+            loginOverlay.style.opacity = "0";
+            
             setTimeout(() => {
                 loginOverlay.style.display = 'none';
                 cargarTodo();
-            }, 500);
+            }, 800);
 
         } else {
-            // Error: Limpiamos contraseña pero mantenemos el email para corregir
+            // CREDENCIALES INCORRECTAS
             await Swal.fire({
-                title: 'Fallo de Autenticación',
-                text: 'El email o la contraseña no coinciden con nuestros registros.',
+                title: 'Acceso Denegado',
+                text: data.message || 'El email o la contraseña son incorrectos.',
                 icon: 'error',
-                confirmButtonColor: '#4361ee',
-                confirmButtonText: 'Reintentar'
+                confirmButtonColor: '#4361ee'
             });
-
-            passInput.value = ''; // Borra solo la clave
+            passInput.value = ''; // Solo borramos la clave
             passInput.focus();
         }
     } catch (err) {
-        Swal.fire('Error', 'Hubo un problema con el servidor.', 'warning');
+        // ERROR DE CONEXIÓN O RED
+        await Swal.fire({
+            title: 'Sin conexión',
+            text: 'No se pudo contactar con el servidor. Reintenta en unos instantes.',
+            icon: 'warning'
+        });
     } finally {
+        // RESTAURAR BOTÓN: Pase lo que pase, el botón vuelve a ser usable
         submitBtn.disabled = false;
-        submitBtn.innerText = 'Entrar al Panel';
+        submitBtn.innerHTML = 'Entrar al Panel';
     }
 };
 
@@ -78,12 +89,17 @@ function logout() {
 }
 
 // ==========================================
-// 2. UTILIDADES Y CARGA DE DATOS (RESTA DEL CÓDIGO)
+// 2. UTILIDADES Y CARGA DE DATOS (READ)
 // ==========================================
 function mostrarToast(titulo, icono = 'success') {
     Swal.fire({
-        title: titulo, icon: icono, toast: true, position: 'top-end',
-        showConfirmButton: false, timer: 2000, timerProgressBar: true
+        title: titulo,
+        icon: icono,
+        toast: true,
+        position: 'top-end',
+        showConfirmButton: false,
+        timer: 2000,
+        timerProgressBar: true
     });
 }
 
@@ -137,6 +153,9 @@ async function cargarAnimales() {
     `).join('');
 }
 
+// ==========================================
+// 3. ACCIONES DE ACTUALIZAR Y ELIMINAR (UPDATE / DELETE)
+// ==========================================
 async function editarNombre(entidad, id, nombreActual) {
     const { value: nuevoNombre } = await Swal.fire({
         title: 'Editar nombre',
@@ -146,47 +165,81 @@ async function editarNombre(entidad, id, nombreActual) {
         confirmButtonColor: '#4361ee',
         inputValidator: (value) => !value && 'El nombre es obligatorio'
     });
+
     if (nuevoNombre && nuevoNombre !== nombreActual) {
-        await fetch(`/api/${entidad}?id=${id}`, { method: 'PATCH', body: JSON.stringify({ nombre: nuevoNombre }) });
+        await fetch(`/api/${entidad}?id=${id}`, { 
+            method: 'PATCH', 
+            body: JSON.stringify({ nombre: nuevoNombre }) 
+        });
         mostrarToast('Nombre actualizado');
         cargarTodo();
     }
 }
 
 async function eliminar(entidad, id) {
-    const result = await Swal.fire({ title: '¿Borrar?', icon: 'warning', showCancelButton: true, confirmButtonColor: '#ef233c' });
+    const result = await Swal.fire({
+        title: '¿Estás seguro?',
+        text: "Esta acción eliminará el registro permanentemente",
+        icon: 'warning',
+        showCancelButton: true,
+        confirmButtonColor: '#ef233c',
+        confirmButtonText: 'Sí, eliminar'
+    });
+
     if (result.isConfirmed) {
         await fetch(`/api/${entidad}?id=${id}`, { method: 'DELETE' });
-        mostrarToast('Eliminado');
+        mostrarToast('Registro eliminado');
         cargarTodo();
     }
 }
 
 async function toggleEstado(id, actual) {
     const nuevo = actual === 'Disponible' ? 'Adoptado' : 'Disponible';
-    await fetch(`/api/animales?id=${id}`, { method: 'PATCH', body: JSON.stringify({ estado: nuevo }) });
+    await fetch(`/api/animales?id=${id}`, { 
+        method: 'PATCH', 
+        body: JSON.stringify({ estado: nuevo }) 
+    });
     mostrarToast('Estado actualizado');
     cargarAnimales();
 }
 
+// ==========================================
+// 4. REGISTRO DE DATOS (CREATE)
+// ==========================================
 document.querySelectorAll('form:not(#loginForm)').forEach(form => {
     form.onsubmit = async (e) => {
         e.preventDefault();
         const id = e.target.id;
         let body = {}, url = '';
+
         if (id === 'animalForm') {
             url = '/api/animales';
-            body = { nombre: document.getElementById('nombre').value, especie: document.getElementById('especie').value, edad: document.getElementById('edad').value, id_protectora: document.getElementById('selectProtectora').value };
+            body = { 
+                nombre: document.getElementById('nombre').value, 
+                especie: document.getElementById('especie').value, 
+                edad: document.getElementById('edad').value, 
+                id_protectora: document.getElementById('selectProtectora').value 
+            };
         } else if (id === 'formProtectora') {
             url = '/api/protectoras';
-            body = { nombre: document.getElementById('p_nombre').value, ubicacion: document.getElementById('p_ubicacion').value };
+            body = { 
+                nombre: document.getElementById('p_nombre').value, 
+                ubicacion: document.getElementById('p_ubicacion').value 
+            };
         } else if (id === 'formUsuario') {
             url = '/api/usuarios';
-            body = { nombre: document.getElementById('u_nombre').value, email: document.getElementById('u_email').value, tipo: document.getElementById('u_tipo').value };
+            body = { 
+                nombre: document.getElementById('u_nombre').value, 
+                email: document.getElementById('u_email').value, 
+                tipo: document.getElementById('u_tipo').value 
+            };
         }
-        await fetch(url, { method: 'POST', body: JSON.stringify(body) });
-        e.target.reset();
-        mostrarToast('Registrado');
-        cargarTodo();
+
+        const res = await fetch(url, { method: 'POST', body: JSON.stringify(body) });
+        if (res.ok) {
+            e.target.reset();
+            mostrarToast('Registrado correctamente');
+            cargarTodo();
+        }
     };
 });
