@@ -42,7 +42,7 @@ async function handleLogin() {
     const pass  = document.getElementById('loginPass').value.trim();
 
     if (!email || !pass) {
-        Swal.fire({ title: 'Atención', text: 'Rellena todos los campos', icon: 'info', confirmButtonColor: '#4361ee' });
+        mostrarErrorLogin('Rellena todos los campos');
         return;
     }
 
@@ -59,13 +59,13 @@ async function handleLogin() {
 
         let data;
         try { data = await response.json(); }
-        catch { throw new Error('Respuesta inválida del servidor. Revisa los logs de Vercel.'); }
+        catch { throw new Error('Respuesta inválida del servidor.'); }
 
         if (!response.ok || !data.success) {
             throw new Error(data.message || 'Credenciales incorrectas');
         }
 
-        // SESIÓN EXITOSA
+        // ✅ SESIÓN EXITOSA
         localStorage.setItem('adminSession', JSON.stringify(data.user));
         btnEntrar.style.background = '#10b981';
         btnEntrar.innerHTML = '<i class="fas fa-check"></i> ¡Bienvenido, ' + data.user.nombre + '!';
@@ -84,24 +84,33 @@ async function handleLogin() {
         setTimeout(() => { loginOverlay.style.display = 'none'; cargarTodo(); }, 400);
 
     } catch (error) {
-        console.error('[Login Error]', error.message);
-
-        // Shake + popup simultáneos
-        const card = document.querySelector('.login-card');
-        card?.classList.add('shake');
-        setTimeout(() => card?.classList.remove('shake'), 500);
-
-        Swal.fire({
-            title: 'Acceso denegado',
-            text: error.message,
-            icon: 'error',
-            confirmButtonColor: '#4361ee',
-            confirmButtonText: 'Intentar de nuevo'
-        });
-
+        mostrarErrorLogin(error.message);
         btnEntrar.disabled = false;
         btnEntrar.innerHTML = originalHTML;
     }
+}
+
+// Error visual DENTRO del card — sin popup externo
+function mostrarErrorLogin(mensaje) {
+    // Shake en el card
+    const card = document.querySelector('.login-card');
+    card?.classList.add('shake');
+    setTimeout(() => card?.classList.remove('shake'), 500);
+
+    // Mensaje inline bajo el botón
+    let errorEl = document.getElementById('loginError');
+    if (!errorEl) {
+        errorEl = document.createElement('p');
+        errorEl.id = 'loginError';
+        errorEl.className = 'login-error';
+        document.querySelector('.login-body')?.appendChild(errorEl);
+    }
+    errorEl.textContent = '⚠ ' + mensaje;
+    errorEl.style.opacity = '1';
+
+    // Auto-ocultar tras 4 s
+    clearTimeout(errorEl._timer);
+    errorEl._timer = setTimeout(() => { errorEl.style.opacity = '0'; }, 4000);
 }
 
 function logout() {
@@ -226,7 +235,7 @@ async function editar(entidad, id, nombreActual) {
         cancelButtonText: 'Cancelar',
         confirmButtonText: 'Guardar cambios',
         confirmButtonColor: '#4361ee',
-        inputValidator: v => !v.trim() && 'El nombre no puede estar vacío'
+        inputValidator: v => !v.trim() ? 'El nombre no puede estar vacío' : null
     });
 
     if (!nuevoNombre || nuevoNombre.trim() === nombreActual) return;
