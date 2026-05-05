@@ -11,14 +11,14 @@
 <body>
 <!-- Capa de bloqueo para el Login -->
     <div id="loginOverlay" class="login-overlay">
-        <div class="card login-card">
-            <i class="fa-solid fa-shield-dog" style="font-size: 3rem; color: #4361ee; margin-bottom: 1rem;"></i>
+        <div class="login-card">
             <h2>Acceso Administrativo</h2>
-            <!-- Quitamos required y añadimos autocomplete off -->
-            <form id="loginForm" class="admin-form" autocomplete="off">
-                <input type="text" id="loginEmail" placeholder="Email" autocomplete="off">
-                <input type="password" id="loginPass" placeholder="Contraseña" autocomplete="new-password">
-                <button type="submit" class="btn-add">Entrar al Panel</button>
+            <form id="loginForm">
+                <input type="text" id="loginEmail" placeholder="Email" style="width:100%; margin-bottom:10px; padding:10px;">
+                <input type="password" id="loginPass" placeholder="Contraseña" style="width:100%; margin-bottom:10px; padding:10px;">
+                <button type="submit" id="btnEntrar" style="width:100%; padding:10px; background:#4361ee; color:white; border:none; cursor:pointer;">
+                    Entrar al Panel
+                </button>
             </form>
         </div>
     </div>
