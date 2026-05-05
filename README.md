@@ -1,10 +1,3 @@
-He analizado la documentación de los entregables 2 y 3 para captar la visión completa del proyecto. Para obtener un 10, el `README` no solo debe decir qué hace el código, sino vender la **arquitectura, la escalabilidad y la justificación técnica** del proyecto.
-
-Aquí tienes una propuesta de `README.md` profesional, estructurado y listo para impresionar a tu profesor.
-
----
-
-```markdown
 # 🐾 Adopta y Deja tu Huella — Plataforma Centralizada de Adopción
 
 [![Status: Initial Phase](https://img.shields.io/badge/Status-Fase%20Inicial-orange)](https://github.com/vicentemosqueralujan/adoptaydejatuhuella)
@@ -103,22 +96,3 @@ Actualmente, el proyecto se encuentra en su **Fase 3: Desarrollo de Funcionalida
 
 ---
 *Este proyecto es parte del Ciclo Formativo de Grado Superior en Desarrollo de Aplicaciones Web (IFP).*
-```
-
----
-
-### Por qué esto te ayudará a sacar un 10:
-1.  **Uso de Badges:** Los iconos al principio dan una impresión inmediata de profesionalismo y orden.
-2.  **Tablas de Justificación:** Al explicar *por qué* usáis PostgreSQL o Vercel, demostráis criterio técnico, que es lo que más valoran los profesores.
-3.  **Terminología de Ingeniería:** El uso de términos como "SPA", "CI/CD", "Integridad referencial" y "Separación de responsabilidades" eleva el nivel académico del documento.
-4.  **Estructura Clara:** Separa la visión de negocio de la implementación técnica, siguiendo el estándar de la industria (GitHub).
-
-### Pasos finales recomendados:
-1. Crea/Edita el archivo `README.md` en tu repositorio.
-2. Pega este código.
-3. Haz el **commit y push** con el comando que te pasé antes:
-   ```bash
-   git add README.md
-   git commit -m "docs: actualizar README a version profesional definitiva"
-   git push origin main
-   ```
