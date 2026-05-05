@@ -1,4 +1,36 @@
-<h1>Adoptaydejatuhuella.com - ¡En Línea!</h1>
-<p>Prueba de despliegue del Grupo 6 cumplida.</p>
-<p>Yunyang Hu 2</p>
-<p>Arnau Oriol</p>
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Adoptaydejatuhuella - CRUD Test</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <h1>🐾 Gestión de Animales (Prueba de Conexión)</h1>
+
+    <!-- Formulario para añadir -->
+    <section>
+        <h2>Añadir Animal</h2>
+        <form id="animalForm">
+            <input type="text" id="nombre" placeholder="Nombre del animal" required>
+            <input type="text" id="especie" placeholder="Especie (Perro, Gato...)" required>
+            <input type="number" id="edad" placeholder="Edad">
+            <button type="submit">Dar de alta</button>
+        </form>
+    </section>
+
+    <hr>
+
+    <!-- Lista para mostrar -->
+    <section>
+        <h2>Animales en la Base de Datos</h2>
+        <button onclick="cargarAnimales()">🔄 Refrescar Lista</button>
+        <ul id="listaAnimales">
+            <!-- Aquí se cargarán los datos -->
+        </ul>
+    </section>
+
+    <script src="scripts.js"></script>
+</body>
+</html>
