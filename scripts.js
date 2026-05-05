@@ -1,35 +1,60 @@
-// --- SISTEMA DE SESIÓN Y LOGIN ---
+// ==========================================
+// 1. SISTEMA DE SESIÓN Y LOGIN
+// ==========================================
 const loginOverlay = document.getElementById('loginOverlay');
+const loginForm = document.getElementById('loginForm');
 
-// Verificar sesión al cargar
+// Verificar sesión al cargar la página
 const session = localStorage.getItem('adminSession');
 if (session) {
     loginOverlay.style.display = 'none';
     cargarTodo();
 }
 
-document.getElementById('loginForm').onsubmit = async (e) => {
+// Manejo del formulario de Login
+loginForm.onsubmit = async (e) => {
     e.preventDefault();
-    const email = document.getElementById('loginEmail').value;
-    const password = document.getElementById('loginPass').value;
+    const emailInput = document.getElementById('loginEmail');
+    const passInput = document.getElementById('loginPass');
 
     try {
         const res = await fetch('/api/login', {
             method: 'POST',
-            body: JSON.stringify({ email, password })
+            body: JSON.stringify({ 
+                email: emailInput.value, 
+                password: passInput.value 
+            })
         });
         const data = await res.json();
 
         if (data.success) {
+            // LOGIN EXITOSO
             localStorage.setItem('adminSession', JSON.stringify(data.user));
+            
+            await Swal.fire({
+                title: `¡Bienvenido, ${data.user.nombre}!`,
+                text: 'Acceso concedido al panel de gestión.',
+                icon: 'success',
+                timer: 2000,
+                showConfirmButton: false
+            });
+
             loginOverlay.style.display = 'none';
-            mostrarToast(`Bienvenido, ${data.user.nombre}`);
             cargarTodo();
         } else {
-            Swal.fire('Error', data.message || 'Credenciales incorrectas', 'error');
+            // LOGIN FALLIDO
+            await Swal.fire({
+                title: 'Acceso Denegado',
+                text: data.message || 'El email o la contraseña no son correctos.',
+                icon: 'error',
+                confirmButtonColor: '#4361ee'
+            });
+
+            loginForm.reset(); 
+            emailInput.focus(); 
         }
     } catch (err) {
-        Swal.fire('Error', 'No se pudo conectar con el servidor', 'error');
+        Swal.fire('Error de Conexión', 'No se ha podido validar el acceso.', 'warning');
     }
 };
 
@@ -38,7 +63,9 @@ function logout() {
     location.reload();
 }
 
-// --- UTILIDADES ---
+// ==========================================
+// 2. UTILIDADES Y NOTIFICACIONES
+// ==========================================
 function mostrarToast(titulo, icono = 'success') {
     Swal.fire({
         title: titulo,
@@ -51,7 +78,9 @@ function mostrarToast(titulo, icono = 'success') {
     });
 }
 
-// --- CARGA DE DATOS ---
+// ==========================================
+// 3. CARGA DE DATOS (READ)
+// ==========================================
 async function cargarTodo() {
     cargarProtectoras();
     cargarUsuarios();
@@ -91,7 +120,7 @@ async function cargarUsuarios() {
                 <button onclick="editarNombre('usuarios', ${u.id_usuario}, '${u.nombre_usuario}')" class="btn-action btn-edit">
                     <i class="fa-solid fa-pen"></i>
                 </button>
-                <button onclick="eliminar('usuarios', ${u.id_usuario})" class="btn-action btn-user-xmark">
+                <button onclick="eliminar('usuarios', ${u.id_usuario})" class="btn-action btn-del">
                     <i class="fa-solid fa-user-xmark"></i>
                 </button>
             </div>
@@ -109,7 +138,7 @@ async function cargarAnimales() {
                 <button onclick="editarNombre('animales', ${a.id_animal}, '${a.nombre_animal}')" class="btn-action btn-edit" style="background:#e0f2fe; color:#0369a1">
                     <i class="fa-solid fa-pen"></i>
                 </button>
-                <button onclick="toggleEstado(${a.id_animal}, '${a.estado}')" class="btn-action btn-edit">
+                <button onclick="toggleEstado(${a.id_animal}, '${a.estado}')" class="btn-action btn-edit" title="Cambiar estado">
                     <i class="fa-solid fa-rotate"></i>
                 </button>
                 <button onclick="eliminar('animales', ${a.id_animal})" class="btn-action btn-del">
@@ -120,7 +149,9 @@ async function cargarAnimales() {
     `).join('');
 }
 
-// --- ACCIONES (UPDATE / DELETE) ---
+// ==========================================
+// 4. ACCIONES DE ACTUALIZAR Y ELIMINAR (UPDATE / DELETE)
+// ==========================================
 async function editarNombre(entidad, id, nombreActual) {
     const { value: nuevoNombre } = await Swal.fire({
         title: 'Editar nombre',
@@ -144,7 +175,7 @@ async function editarNombre(entidad, id, nombreActual) {
 async function eliminar(entidad, id) {
     const result = await Swal.fire({
         title: '¿Estás seguro?',
-        text: "Esta acción eliminará el registro permanentemente",
+        text: "Esta acción no se puede deshacer.",
         icon: 'warning',
         showCancelButton: true,
         confirmButtonColor: '#ef233c',
@@ -170,7 +201,9 @@ async function toggleEstado(id, actual) {
     cargarAnimales();
 }
 
-// --- ENVÍO DE FORMULARIOS CON LIMPIEZA ---
+// ==========================================
+// 5. REGISTRO DE DATOS (CREATE)
+// ==========================================
 document.querySelectorAll('form:not(#loginForm)').forEach(form => {
     form.onsubmit = async (e) => {
         e.preventDefault();
@@ -201,9 +234,11 @@ document.querySelectorAll('form:not(#loginForm)').forEach(form => {
             };
         }
 
-        await fetch(url, { method: 'POST', body: JSON.stringify(body) });
-        e.target.reset(); // Limpia el formulario tras enviar
-        mostrarToast('Registrado correctamente');
-        cargarTodo();
+        const res = await fetch(url, { method: 'POST', body: JSON.stringify(body) });
+        if (res.ok) {
+            e.target.reset(); // Limpia campos tras éxito
+            mostrarToast('Registrado correctamente');
+            cargarTodo();
+        }
     };
 });
