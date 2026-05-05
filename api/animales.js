@@ -17,8 +17,9 @@ export default async function handler(req, res) {
       return res.status(200).json({ ok: true });
     }
     if (method === 'PATCH') {
-      const { estado } = JSON.parse(req.body);
-      await sql`UPDATE animal SET estado = ${estado} WHERE id_animal = ${id}`;
+      const { nombre, estado } = JSON.parse(req.body);
+      if (nombre) await sql`UPDATE animal SET nombre_animal = ${nombre} WHERE id_animal = ${id}`;
+      if (estado) await sql`UPDATE animal SET estado = ${estado} WHERE id_animal = ${id}`;
       return res.status(200).json({ ok: true });
     }
   } catch (e) { return res.status(500).json({ error: e.message }); }

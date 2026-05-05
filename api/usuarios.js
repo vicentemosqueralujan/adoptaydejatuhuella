@@ -16,5 +16,10 @@ export default async function handler(req, res) {
       await sql`DELETE FROM usuario WHERE id_usuario = ${id}`;
       return res.status(200).json({ ok: true });
     }
+    if (method === 'PATCH') {
+      const { nombre } = JSON.parse(req.body);
+      await sql`UPDATE usuario SET nombre_usuario = ${nombre} WHERE id_usuario = ${id}`;
+      return res.status(200).json({ ok: true });
+    }
   } catch (e) { return res.status(500).json({ error: e.message }); }
 }

@@ -16,5 +16,10 @@ export default async function handler(req, res) {
       await sql`DELETE FROM protectora WHERE id_protectora = ${id}`;
       return res.status(200).json({ ok: true });
     }
+    if (method === 'PATCH') {
+      const { nombre } = JSON.parse(req.body);
+      await sql`UPDATE protectora SET nombre_protectora = ${nombre} WHERE id_protectora = ${id}`;
+      return res.status(200).json({ ok: true });
+    }
   } catch (e) { return res.status(500).json({ error: e.message }); }
 }
