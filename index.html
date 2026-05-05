@@ -9,17 +9,25 @@
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
 </head>
 <body>
-<!-- Capa de bloqueo para el Login -->
+    <!-- Capa de Login Blindada -->
     <div id="loginOverlay" class="login-overlay">
         <div class="login-card">
-            <h2>Acceso Administrativo</h2>
-            <form id="loginForm">
-                <input type="text" id="loginEmail" placeholder="Email" style="width:100%; margin-bottom:10px; padding:10px;">
-                <input type="password" id="loginPass" placeholder="Contraseña" style="width:100%; margin-bottom:10px; padding:10px;">
-                <button type="submit" id="btnEntrar" style="width:100%; padding:10px; background:#4361ee; color:white; border:none; cursor:pointer;">
-                    Entrar al Panel
+            <div class="login-header">
+                <i class="fa-solid fa-user-shield"></i>
+                <h2>Panel de Control</h2>
+                <p>Introduce tus credenciales administrativas</p>
+            </div>
+            <div class="login-body">
+                <div class="input-group">
+                    <input type="email" id="loginEmail" placeholder="Correo electrónico" autocomplete="off">
+                </div>
+                <div class="input-group">
+                    <input type="password" id="loginPass" placeholder="Contraseña">
+                </div>
+                <button id="btnEntrar" class="btn-login">
+                    <span>Entrar al Panel</span>
                 </button>
-            </form>
+            </div>
         </div>
     </div>
 
