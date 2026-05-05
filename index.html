@@ -9,16 +9,17 @@
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
 </head>
 <body>
-    <!-- Capa de bloqueo para el Login -->
+<!-- Capa de bloqueo para el Login -->
     <div id="loginOverlay" class="login-overlay">
         <div class="card login-card">
             <i class="fa-solid fa-shield-dog" style="font-size: 3rem; color: #4361ee; margin-bottom: 1rem;"></i>
             <h2>Acceso Administrativo</h2>
-                <form id="loginForm" class="admin-form" autocomplete="off">
-                    <input type="text" id="loginEmail" placeholder="Email o Usuario" required autocomplete="off">
-                    <input type="password" id="loginPass" placeholder="Contraseña" required autocomplete="new-password">
-                    <button type="submit" class="btn-add">Entrar al Panel</button>
-                </form>
+            <!-- Quitamos required y añadimos autocomplete off -->
+            <form id="loginForm" class="admin-form" autocomplete="off">
+                <input type="text" id="loginEmail" placeholder="Email" autocomplete="off">
+                <input type="password" id="loginPass" placeholder="Contraseña" autocomplete="new-password">
+                <button type="submit" class="btn-add">Entrar al Panel</button>
+            </form>
         </div>
     </div>
 

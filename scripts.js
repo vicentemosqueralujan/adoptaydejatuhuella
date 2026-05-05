@@ -1,5 +1,5 @@
 // ==========================================
-// 1. SISTEMA DE LOGIN BLINDADO (UX PRO)
+// 1. SISTEMA DE LOGIN REDISEÑADO (UX TOTAL)
 // ==========================================
 const loginOverlay = document.getElementById('loginOverlay');
 const loginForm = document.getElementById('loginForm');
@@ -13,46 +13,62 @@ if (localStorage.getItem('adminSession')) {
 loginForm.onsubmit = async (e) => {
     e.preventDefault();
     
-    const emailInput = document.getElementById('loginEmail');
-    const passInput = document.getElementById('loginPass');
+    // Capturamos valores y limpiamos espacios
+    const email = document.getElementById('loginEmail').value.trim();
+    const pass = document.getElementById('loginPass').value.trim();
     const submitBtn = e.target.querySelector('button');
 
-    // Feedback visual inmediato: deshabilitar para evitar doble clic
+    // VALIDACIÓN MANUAL: Evita que el navegador bloquee el flujo con sus propios mensajes
+    if (!email || !pass) {
+        Swal.fire({
+            title: 'Campos incompletos',
+            text: 'Por favor, introduce tu email y contraseña para continuar.',
+            icon: 'info',
+            confirmButtonColor: '#4361ee'
+        });
+        return; 
+    }
+
+    // UI: Bloqueo de botón y feedback visual
     submitBtn.disabled = true;
-    submitBtn.innerHTML = '<i class="fas fa-circle-notch fa-spin"></i> Comprobando...';
+    submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Verificando...';
 
     try {
+        // Timeout de seguridad: Si el servidor no responde en 10s, cancelamos
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 10000); 
+
         const res = await fetch('/api/login', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ 
-                email: emailInput.value, 
-                password: passInput.value 
-            })
+            body: JSON.stringify({ email, password: pass }),
+            signal: controller.signal
         });
 
-        // Capturar errores de servidor o base de datos
-        if (!res.ok && res.status !== 401) throw new Error('Error en el servidor');
+        clearTimeout(timeoutId);
+        
+        // Manejo de errores de respuesta (ej. 401 o 500)
+        if (!res.ok && res.status !== 401) {
+            throw new Error('Error de conexión con la base de datos.');
+        }
 
         const data = await res.json();
 
         if (data.success) {
-            // LOGIN EXITOSO: Guardar sesión y mostrar éxito
+            // LOGIN EXITOSO
             localStorage.setItem('adminSession', JSON.stringify(data.user));
             
             await Swal.fire({
                 title: '¡Acceso Correcto!',
-                text: `Bienvenido, ${data.user.nombre}`,
+                text: `Bienvenido al panel, ${data.user.nombre}`,
                 icon: 'success',
-                timer: 1500,
+                timer: 1800,
                 showConfirmButton: false,
                 allowOutsideClick: false
             });
 
-            // Transición suave de salida
-            loginOverlay.style.transition = "opacity 0.8s ease";
-            loginOverlay.style.opacity = "0";
-            
+            // Animación de salida cinematográfica
+            loginOverlay.style.opacity = '0';
             setTimeout(() => {
                 loginOverlay.style.display = 'none';
                 cargarTodo();
@@ -60,24 +76,25 @@ loginForm.onsubmit = async (e) => {
 
         } else {
             // CREDENCIALES INCORRECTAS
-            await Swal.fire({
-                title: 'Acceso Denegado',
-                text: data.message || 'El email o la contraseña son incorrectos.',
-                icon: 'error',
-                confirmButtonColor: '#4361ee'
-            });
-            passInput.value = ''; // Solo borramos la clave
-            passInput.focus();
+            throw new Error(data.message || 'El email o la contraseña no son válidos.');
         }
+
     } catch (err) {
-        // ERROR DE CONEXIÓN O RED
+        // MANEJO DE ERRORES (Timeout, Red o Credenciales)
+        let mensajeError = err.message;
+        if (err.name === 'AbortError') mensajeError = 'El servidor está tardando demasiado en responder.';
+
         await Swal.fire({
-            title: 'Sin conexión',
-            text: 'No se pudo contactar con el servidor. Reintenta en unos instantes.',
-            icon: 'warning'
+            title: 'Fallo de Autenticación',
+            text: mensajeError,
+            icon: 'error',
+            confirmButtonColor: '#ef233c'
         });
+        
+        // Limpiamos solo la contraseña para facilitar el reintento
+        document.getElementById('loginPass').value = ''; 
     } finally {
-        // RESTAURAR BOTÓN: Pase lo que pase, el botón vuelve a ser usable
+        // RESTAURAR BOTÓN SIEMPRE: Pase lo que pase, el botón vuelve a ser usable
         submitBtn.disabled = false;
         submitBtn.innerHTML = 'Entrar al Panel';
     }
@@ -89,7 +106,7 @@ function logout() {
 }
 
 // ==========================================
-// 2. UTILIDADES Y CARGA DE DATOS (READ)
+// 2. UTILIDADES Y NOTIFICACIONES
 // ==========================================
 function mostrarToast(titulo, icono = 'success') {
     Swal.fire({
@@ -103,6 +120,9 @@ function mostrarToast(titulo, icono = 'success') {
     });
 }
 
+// ==========================================
+// 3. CARGA DE DATOS (READ)
+// ==========================================
 async function cargarTodo() {
     cargarProtectoras();
     cargarUsuarios();
@@ -112,7 +132,10 @@ async function cargarTodo() {
 async function cargarProtectoras() {
     const res = await fetch('/api/protectoras');
     const data = await res.json();
-    document.getElementById('listaProtectoras').innerHTML = data.map(p => `
+    const lista = document.getElementById('listaProtectoras');
+    const select = document.getElementById('selectProtectora');
+    
+    lista.innerHTML = data.map(p => `
         <li class="item-lista">
             <span>${p.nombre_protectora}</span>
             <div class="actions">
@@ -121,7 +144,8 @@ async function cargarProtectoras() {
             </div>
         </li>
     `).join('');
-    document.getElementById('selectProtectora').innerHTML = data.map(p => `<option value="${p.id_protectora}">${p.nombre_protectora}</option>`).join('');
+    
+    select.innerHTML = data.map(p => `<option value="${p.id_protectora}">${p.nombre_protectora}</option>`).join('');
 }
 
 async function cargarUsuarios() {
@@ -154,16 +178,16 @@ async function cargarAnimales() {
 }
 
 // ==========================================
-// 3. ACCIONES DE ACTUALIZAR Y ELIMINAR (UPDATE / DELETE)
+// 4. ACCIONES DE ACTUALIZAR Y ELIMINAR (UPDATE / DELETE)
 // ==========================================
 async function editarNombre(entidad, id, nombreActual) {
     const { value: nuevoNombre } = await Swal.fire({
-        title: 'Editar nombre',
+        title: 'Editar registro',
         input: 'text',
         inputValue: nombreActual,
         showCancelButton: true,
         confirmButtonColor: '#4361ee',
-        inputValidator: (value) => !value && 'El nombre es obligatorio'
+        inputValidator: (value) => !value && 'Este campo no puede estar vacío'
     });
 
     if (nuevoNombre && nuevoNombre !== nombreActual) {
@@ -171,24 +195,24 @@ async function editarNombre(entidad, id, nombreActual) {
             method: 'PATCH', 
             body: JSON.stringify({ nombre: nuevoNombre }) 
         });
-        mostrarToast('Nombre actualizado');
+        mostrarToast('Actualizado correctamente');
         cargarTodo();
     }
 }
 
 async function eliminar(entidad, id) {
     const result = await Swal.fire({
-        title: '¿Estás seguro?',
-        text: "Esta acción eliminará el registro permanentemente",
+        title: '¿Confirmar eliminación?',
+        text: "Esta acción es permanente.",
         icon: 'warning',
         showCancelButton: true,
         confirmButtonColor: '#ef233c',
-        confirmButtonText: 'Sí, eliminar'
+        confirmButtonText: 'Eliminar'
     });
 
     if (result.isConfirmed) {
         await fetch(`/api/${entidad}?id=${id}`, { method: 'DELETE' });
-        mostrarToast('Registro eliminado');
+        mostrarToast('Registro borrado');
         cargarTodo();
     }
 }
@@ -204,7 +228,7 @@ async function toggleEstado(id, actual) {
 }
 
 // ==========================================
-// 4. REGISTRO DE DATOS (CREATE)
+// 5. REGISTRO DE DATOS (CREATE)
 // ==========================================
 document.querySelectorAll('form:not(#loginForm)').forEach(form => {
     form.onsubmit = async (e) => {
@@ -238,7 +262,7 @@ document.querySelectorAll('form:not(#loginForm)').forEach(form => {
         const res = await fetch(url, { method: 'POST', body: JSON.stringify(body) });
         if (res.ok) {
             e.target.reset();
-            mostrarToast('Registrado correctamente');
+            mostrarToast('Registrado con éxito');
             cargarTodo();
         }
     };
