@@ -90,14 +90,11 @@ async function handleLogin() {
     }
 }
 
-// Error visual DENTRO del card — sin popup externo
 function mostrarErrorLogin(mensaje) {
-    // Shake en el card
     const card = document.querySelector('.login-card');
     card?.classList.add('shake');
     setTimeout(() => card?.classList.remove('shake'), 500);
 
-    // Mensaje inline bajo el botón
     let errorEl = document.getElementById('loginError');
     if (!errorEl) {
         errorEl = document.createElement('p');
@@ -108,7 +105,6 @@ function mostrarErrorLogin(mensaje) {
     errorEl.textContent = '⚠ ' + mensaje;
     errorEl.style.opacity = '1';
 
-    // Auto-ocultar tras 4 s
     clearTimeout(errorEl._timer);
     errorEl._timer = setTimeout(() => { errorEl.style.opacity = '0'; }, 4000);
 }
@@ -125,7 +121,7 @@ function logout() {
 }
 
 // ==========================================
-// CARGA DE DATOS
+// CARGA DE DATOS (REPARADO)
 // ==========================================
 async function cargarTodo() {
     await Promise.all([cargarProtectoras(), cargarUsuarios(), cargarAnimales()]);
@@ -147,7 +143,7 @@ async function cargarProtectoras() {
                             ${p.nombre_protectora}
                         </span>
                         <div class="btn-group">
-                            <button onclick="editar('protectoras', ${p.id_protectora}, ${JSON.stringify(p.nombre_protectora)})" class="btn-edit" title="Editar">
+                            <button onclick="editar('protectoras', ${p.id_protectora}, '${p.nombre_protectora.replace(/'/g, "\\'")}')" class="btn-edit" title="Editar">
                                 <i class="fa-solid fa-pen"></i>
                             </button>
                             <button onclick="eliminar('protectoras', ${p.id_protectora})" class="btn-del" title="Eliminar">
@@ -179,7 +175,7 @@ async function cargarUsuarios() {
                             <span class="badge badge-${u.tipo_usuario.toLowerCase()}">${u.tipo_usuario}</span>
                         </span>
                         <div class="btn-group">
-                            <button onclick="editar('usuarios', ${u.id_usuario}, ${JSON.stringify(u.nombre_usuario)})" class="btn-edit" title="Editar">
+                            <button onclick="editar('usuarios', ${u.id_usuario}, '${u.nombre_usuario.replace(/'/g, "\\'")}')" class="btn-edit" title="Editar">
                                 <i class="fa-solid fa-pen"></i>
                             </button>
                             <button onclick="eliminar('usuarios', ${u.id_usuario})" class="btn-del" title="Eliminar">
@@ -207,7 +203,7 @@ async function cargarAnimales() {
                             <span class="badge badge-${a.estado === 'Disponible' ? 'disponible' : 'adoptado'}">${a.estado}</span>
                         </span>
                         <div class="btn-group">
-                            <button onclick="editar('animales', ${a.id_animal}, ${JSON.stringify(a.nombre_animal)})" class="btn-edit" title="Editar">
+                            <button onclick="editar('animales', ${a.id_animal}, '${a.nombre_animal.replace(/'/g, "\\'")}')" class="btn-edit" title="Editar">
                                 <i class="fa-solid fa-pen"></i>
                             </button>
                             <button onclick="eliminar('animales', ${a.id_animal})" class="btn-del" title="Eliminar">
@@ -260,7 +256,7 @@ async function editar(entidad, id, nombreActual) {
 }
 
 // ==========================================
-// ELIMINAR
+// ELIMINAR Y FORMULARIOS (RESTO DEL CÓDIGO)
 // ==========================================
 async function eliminar(entidad, id) {
     const result = await Swal.fire({
@@ -285,9 +281,6 @@ async function eliminar(entidad, id) {
     }
 }
 
-// ==========================================
-// FORMULARIOS (CREAR)
-// ==========================================
 document.querySelectorAll('form').forEach(form => {
     form.addEventListener('submit', async (e) => {
         e.preventDefault();
