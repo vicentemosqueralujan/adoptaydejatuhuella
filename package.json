@@ -1,5 +1,25 @@
 {
   "dependencies": {
     "@vercel/postgres": "^0.10.0"
-  }
+  },
+  "name": "adoptaydejatuhuella",
+  "version": "1.0.0",
+  "description": "",
+  "main": "scripts.js",
+  "devDependencies": {},
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/vicentemosqueralujan/adoptaydejatuhuella.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/vicentemosqueralujan/adoptaydejatuhuella/issues"
+  },
+  "homepage": "https://github.com/vicentemosqueralujan/adoptaydejatuhuella#readme"
 }
