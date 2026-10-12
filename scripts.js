@@ -10,7 +10,10 @@ let estado = {
     rolPorDefecto: 'Adoptante',
     protectoras: [],
     usuarios: [],
+    animales: [],
+    catalogo: [],
     filtroUsuarios: '',
+    filtroCatalogo: { q: '', especie: '', protectora: '' },
 };
 
 function actualizarEstado(cambios) {
@@ -192,12 +195,17 @@ document.getElementById('btnLogout')?.addEventListener('click', () => {
 // ==========================================
 async function iniciarPanel() {
     aplicarPermisos();
+    configurarPanelAnimales();
 
-    // El catálogo de roles y las protectoras alimentan los desplegables del modal.
+    // El catálogo de roles y las protectoras alimentan los desplegables.
     await Promise.all([cargarCatalogoRoles(), cargarProtectoras()]);
+
+    // Cada rol carga sólo lo que puede ver: el adoptante no pide el listado de
+    // gestión y la protectora no pide el de usuarios.
     await Promise.all([
         tienePermiso('usuarios:gestionar') ? cargarUsuarios() : Promise.resolve(),
-        cargarAnimales(),
+        tienePermiso('animales:gestionar') ? cargarAnimales() : Promise.resolve(),
+        tienePermiso('animales:consultar') ? cargarCatalogo() : Promise.resolve(),
     ]);
 }
 
@@ -218,6 +226,16 @@ async function cargarCatalogoRoles() {
             .join('');
         select.value = estado.rolPorDefecto;
         sincronizarCampoProtectora();
+
+        // El registro público sólo ofrece los roles marcados con `autoRegistro`.
+        const selectRegistro = document.getElementById('regTipo');
+        if (selectRegistro) {
+            selectRegistro.innerHTML = estado.roles
+                .filter(r => r.autoRegistro)
+                .map(r => `<option value="${esc(r.valor)}">${esc(r.etiqueta)}</option>`)
+                .join('');
+            sincronizarCampoProtectoraRegistro();
+        }
     } catch (e) {
         console.error('[cargarCatalogoRoles]', e.message);
     }
@@ -265,12 +283,15 @@ async function cargarProtectoras() {
         const selAnimal = document.getElementById('selectProtectora');
         if (selAnimal) selAnimal.innerHTML = '<option value="">— Selecciona protectora —</option>' + opciones;
 
-        const selUsuario = document.getElementById('u_protectora');
-        if (selUsuario) {
-            const previo = selUsuario.value;
-            selUsuario.innerHTML = '<option value="">— Selecciona protectora —</option>' + opciones;
-            selUsuario.value = previo;
-        }
+        [['u_protectora', '— Selecciona protectora —'],
+         ['regProtectora', '— Selecciona tu protectora —'],
+         ['filtroProtectoraCat', 'Todas las protectoras']].forEach(([id, vacio]) => {
+            const sel = document.getElementById(id);
+            if (!sel) return;
+            const previo = sel.value;
+            sel.innerHTML = `<option value="">${vacio}</option>` + opciones;
+            sel.value = previo;
+        });
     } catch (e) {
         console.error('[cargarProtectoras]', e.message);
     }
@@ -469,10 +490,13 @@ document.getElementById('formUsuario')?.addEventListener('submit', async e => {
 // ==========================================
 async function cargarAnimales() {
     try {
+        // El backend acota por sí solo: una protectora recibe únicamente los suyos.
         const { ok, data } = await peticion('/api/animales');
         if (!ok) return;
 
         const animales = Array.isArray(data) ? data : [];
+        actualizarEstado({ animales });
+
         const lista = document.getElementById('listaAnimales');
         if (!lista) return;
 
@@ -482,12 +506,12 @@ async function cargarAnimales() {
                     <span>
                         <i class="fa-solid fa-paw" style="color:#4361ee;margin-right:8px"></i>
                         <b>${esc(a.nombre_animal)}</b>
-                        <span class="badge badge-${a.estado === 'Disponible' ? 'disponible' : 'adoptado'}">${esc(a.estado)}</span>
+                        <small style="color:#64748b">${esc(a.especie_animal)}${a.edad !== null && a.edad !== undefined ? ` · ${esc(a.edad)} años` : ''}</small>
+                        <span class="badge badge-${esc(String(a.estado).toLowerCase())}">${esc(a.estado)}</span>
                     </span>
                     <div class="btn-group">
-                        <button type="button" class="btn-edit" title="Editar"
-                                data-accion="editar" data-entidad="animales"
-                                data-id="${a.id_animal}" data-nombre="${esc(a.nombre_animal)}">
+                        <button type="button" class="btn-edit" title="Editar animal"
+                                data-accion="editar-animal" data-id="${a.id_animal}">
                             <i class="fa-solid fa-pen"></i>
                         </button>
                         <button type="button" class="btn-del" title="Eliminar"
@@ -514,6 +538,11 @@ document.addEventListener('click', async e => {
     if (accion === 'editar-usuario') {
         const usuario = estado.usuarios.find(u => String(u.id_usuario) === String(id));
         if (usuario) abrirModalUsuario(usuario);
+        return;
+    }
+    if (accion === 'editar-animal') {
+        const animal = estado.animales.find(a => String(a.id_animal) === String(id));
+        if (animal) abrirModalAnimal(animal);
         return;
     }
     if (accion === 'editar')   return editarNombre(entidad, id, nombre);
@@ -570,8 +599,14 @@ async function eliminar(entidad, id) {
 
 /** Recarga solo lo afectado: evita refrescar listas que no han cambiado. */
 async function recargarEntidad(entidad) {
-    if (entidad === 'usuarios')    return cargarUsuarios();
-    if (entidad === 'animales')    return cargarAnimales();
+    if (entidad === 'usuarios') return cargarUsuarios();
+    if (entidad === 'animales') {
+        await Promise.all([
+            tienePermiso('animales:gestionar') ? cargarAnimales() : Promise.resolve(),
+            tienePermiso('animales:consultar') ? cargarCatalogo() : Promise.resolve(),
+        ]);
+        return;
+    }
     if (entidad === 'protectoras') {
         // Una protectora afecta además a los desplegables y a la columna de la tabla.
         await cargarProtectoras();
@@ -632,12 +667,5 @@ Object.entries(ALTAS).forEach(([formId, config]) => {
     });
 });
 
-// ==========================================
-// ARRANQUE
-// ==========================================
-const sesionGuardada = leerSesion();
-if (sesionGuardada) {
-    actualizarEstado({ sesion: sesionGuardada });
-    if (loginOverlay) loginOverlay.style.display = 'none';
-    iniciarPanel();
-}
+// El arranque vive al final de registro-catalogo.js, que se carga después:
+// así todas las funciones del panel están definidas cuando se invoca iniciarPanel().

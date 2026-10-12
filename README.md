@@ -57,7 +57,7 @@ Vercel mapea automáticamente cada fichero de `api/` a una ruta. No hace falta `
 | `/api/login` | `api/login.js` | `POST`, `OPTIONS` | Valida credenciales y devuelve `{ success, user }`. |
 | `/api/protectoras` | `api/protectoras.js` | `GET`, `POST`, `PATCH`, `DELETE`, `OPTIONS` | CRUD de protectoras. |
 | `/api/usuarios` | `api/usuarios.js` | `GET`, `POST`, `PATCH`, `DELETE`, `OPTIONS` | CRUD de usuarios (nunca devuelve `password`). |
-| `/api/animales` | `api/animales.js` | `GET`, `POST`, `PATCH`, `DELETE`, `OPTIONS` | CRUD de animales. |
+| `/api/animales` | `api/animales.js` | `GET`, `POST`, `PATCH`, `DELETE`, `OPTIONS` | Catálogo y gestión de animales, acotados por rol. |
 | `/api/roles` | `api/roles.js` | `GET`, `OPTIONS` | Catálogo de roles que alimenta el panel. |
 
 Los módulos `api/_roles.js` y `api/_auth.js` empiezan por `_`, por lo que Vercel no los
@@ -66,6 +66,15 @@ publica como rutas: son internos.
 **Autorización:** salvo el alta inicial, `/api/usuarios` exige el permiso
 `usuarios:gestionar`, identificado por la cabecera `X-Usuario-Id` (`401` sin identidad,
 `403` sin permisos). Consulta la limitación anotada en `api/_auth.js`.
+
+`GET /api/animales` admite filtros opcionales combinables:
+
+| Parámetro | Ejemplo | Efecto |
+| :--- | :--- | :--- |
+| `q` | `?q=nal` | Busca en nombre y especie (sin distinguir mayúsculas). |
+| `especie` | `?especie=Perro` | Coincidencia exacta de especie, sin distinguir mayúsculas. |
+| `estado` | `?estado=Adoptado` | Sólo lo aplican los roles con `animales:gestionar`. |
+| `id_protectora` | `?id_protectora=2` | Ignorado para el rol `Protectora`, que siempre ve la suya. |
 
 `PATCH` y `DELETE` identifican el registro por query string: `/api/animales?id=7`.
 Todos los handlers responden `405` ante métodos no contemplados y `500` con mensaje
@@ -83,18 +92,29 @@ Tres entidades normalizadas (los nombres de columna son los que usan los handler
 | `protectora` | `id_protectora` | `nombre_protectora`, `ubicacion` |
 | `animal` | `id_animal` | `nombre_animal`, `especie_animal`, `edad`, `estado`, `id_protectora` → `protectora` |
 
-`animal.estado` se inicializa a `'Disponible'` en el alta.
+`animal.estado` admite `'Disponible'`, `'Reservado'` y `'Adoptado'`, y se inicializa a
+`'Disponible'` en el alta. La edad debe estar entre 0 y 40 años.
+
+```sql
+-- Recomendado: restringir los estados y acelerar el catálogo.
+ALTER TABLE animal
+    ADD CONSTRAINT chk_animal_estado
+    CHECK (estado IN ('Disponible', 'Reservado', 'Adoptado'));
+
+CREATE INDEX IF NOT EXISTS idx_animal_protectora ON animal (id_protectora);
+CREATE INDEX IF NOT EXISTS idx_animal_estado     ON animal (estado);
+```
 
 ### Roles y migración
 
 `usuario.tipo_usuario` admite tres roles, definidos en `api/_roles.js` como única
 fuente de verdad (el desplegable del panel se construye desde `GET /api/roles`):
 
-| Rol | Protectora | Permisos |
-| :--- | :--- | :--- |
-| `Admin` | — | `usuarios:gestionar`, `protectoras:gestionar`, `animales:gestionar` |
-| `Protectora` | **obligatoria** | `animales:gestionar` |
-| `Adoptante` | — | `animales:consultar` |
+| Rol | Protectora | Registro público | Permisos |
+| :--- | :--- | :--- | :--- |
+| `Admin` | — | **no** | `usuarios:gestionar`, `protectoras:gestionar`, `animales:gestionar` |
+| `Protectora` | **obligatoria** | sí | `animales:gestionar` |
+| `Adoptante` | — | sí | `animales:consultar` |
 
 Migración necesaria en Neon para la asignación de protectora y el índice de login:
 
@@ -192,13 +212,16 @@ La sesión se guarda en `localStorage` bajo la clave `adminSession`.
 
 ### Lista blanca de registro
 
-`POST /api/usuarios` tiene dos modos:
+`POST /api/usuarios` tiene tres modos, resueltos en este orden:
 
-- **Arranque** — mientras no exista ningún `Admin` en la base de datos, el alta está
-  restringida a una **lista blanca de correos**; cualquier otro recibe `403 Forbidden`.
-- **Gestionado** — en cuanto hay un `Admin`, la lista blanca deja de aplicarse y el alta
-  la realiza un gestor autenticado, que puede crear cualquier correo con cualquier rol.
-  Una petición sin permisos recibe `401`/`403`.
+| Modo | Cuándo se aplica | Qué permite |
+| :--- | :--- | :--- |
+| **Gestionado** | El solicitante tiene `usuarios:gestionar` | Cualquier correo y cualquier rol, incluido `Admin`. |
+| **Arranque** | No hay ningún `Admin` en la base de datos | Sólo los correos de la **lista blanca**; otros reciben `403`. |
+| **Auto-registro** | Ya hay `Admin` y nadie autenticado | Registro público: sólo `Adoptante` y `Protectora`, con contraseña obligatoria. |
+
+En auto-registro, pedir el rol `Admin` devuelve `403 Forbidden`: nadie puede concederse
+privilegios de gestión a sí mismo.
 
 ```js
 // api/usuarios.js
@@ -291,12 +314,28 @@ permisos en la respuesta y el frontend muestra u oculta cada bloque marcado con
 | :--- | :--- | :--- |
 | Gestión de usuarios (tabla + modal) | `usuarios:gestionar` | `Admin` |
 | Tarjeta de protectoras | `protectoras:gestionar` | `Admin` |
-| Tarjeta de animales | `animales:gestionar` | `Admin`, `Protectora` |
+| Gestión de animales (alta, edición, listado) | `animales:gestionar` | `Admin`, `Protectora` |
+| Catálogo de adopción (buscador y filtros) | `animales:consultar` | `Adoptante` |
 
-El panel de usuarios incluye tabla con buscador, un `<dialog>` modal de alta y edición,
-un desplegable de rol alimentado por `GET /api/roles` y un selector de protectora que
-sólo aparece para los roles que la exigen. Dejar la contraseña en blanco genera una
-temporal que se muestra una única vez al crear, y mantiene la existente al editar.
+**Pantalla de acceso.** Dos pestañas: *Acceder* y *Crear cuenta*. El formulario de
+registro ofrece únicamente los roles marcados con `autoRegistro` en `api/_roles.js`
+(`Adoptante` y `Protectora`) y muestra el selector de protectora sólo cuando el rol
+elegido lo exige.
+
+**Panel de usuarios (`Admin`).** Tabla con buscador, `<dialog>` modal de alta y edición,
+desplegable de rol alimentado por `GET /api/roles` y selector de protectora condicional.
+Dejar la contraseña en blanco genera una temporal que se muestra una única vez al crear,
+y mantiene la existente al editar.
+
+**Gestión de animales (`Protectora`).** Alta, edición (nombre, especie, edad y estado) y
+listado de los animales propios. El selector de protectora desaparece: el backend asigna
+siempre la del usuario e ignora cualquier `id_protectora` recibido. Una protectora recibe
+`403` si intenta modificar un animal de otra.
+
+**Catálogo de adopción (`Adoptante`).** Rejilla de tarjetas con icono por especie,
+buscador con retardo que consulta `?q=`, filtro de especie servido por `?especie=` y
+filtro de protectora aplicado en cliente. Sólo se muestran los animales `Disponible`:
+un adoptante no puede forzar otro estado por query string.
 
 ## ☁️ Despliegue en Vercel
 
@@ -327,7 +366,8 @@ adoptaydejatuhuella/
 │   └── generate-icons.py    # Generador reproducible de iconos PWA
 ├── index.html               # SPA: login overlay + dashboard
 ├── styles.css               # Estilos del panel
-├── scripts.js               # Lógica de cliente (login, fetch, CRUD)
+├── scripts.js               # Núcleo de cliente (sesión, permisos, login, usuarios)
+├── registro-catalogo.js     # Registro público, catálogo y edición de animales
 ├── manifest.json            # Manifiesto PWA
 ├── favicon.svg / .ico       # Favicons
 ├── icon-192 / 512 / maskable-512.png
@@ -348,7 +388,8 @@ adoptaydejatuhuella/
 - [x] Registro inicial restringido por lista blanca de correos.
 - [x] Roles granulares, asignación de protectora y panel de administración por permisos.
 - [ ] Sustituir la cabecera `X-Usuario-Id` por un token firmado (JWT/cookie HttpOnly).
-- [ ] Sistema de filtros avanzado.
+- [x] Auto-registro público por roles y catálogo de adopción con buscador y filtros.
+- [ ] Subida de fotografías de los animales.
 - [ ] Pasarela de donaciones (fase futura).
 
 ---

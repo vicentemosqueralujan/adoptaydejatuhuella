@@ -17,7 +17,7 @@ module.exports = async function handler(req, res) {
 
     return res.status(200).json({
         porDefecto: ROL_POR_DEFECTO,
-        roles: DEFINICION_ROLES.map(({ valor, etiqueta, descripcion, requiereProtectora }) =>
-            ({ valor, etiqueta, descripcion, requiereProtectora })),
+        roles: DEFINICION_ROLES.map(({ valor, etiqueta, descripcion, requiereProtectora, autoRegistro }) =>
+            ({ valor, etiqueta, descripcion, requiereProtectora, autoRegistro })),
     });
 };

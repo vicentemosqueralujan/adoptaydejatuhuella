@@ -52,7 +52,14 @@
                 <h2>Panel de Control</h2>
                 <p>Introduce tus credenciales de administrador</p>
             </div>
-            <div class="login-body">
+            <div class="login-tabs" role="tablist">
+                <button type="button" class="login-tab is-active" id="tabAcceder"
+                        role="tab" aria-selected="true" aria-controls="panelAcceder">Acceder</button>
+                <button type="button" class="login-tab" id="tabRegistro"
+                        role="tab" aria-selected="false" aria-controls="panelRegistro">Crear cuenta</button>
+            </div>
+
+            <div class="login-body" id="panelAcceder" role="tabpanel" aria-labelledby="tabAcceder">
                 <div class="input-group">
                     <input type="email" id="loginEmail" placeholder="Correo electrónico" aria-label="Correo electrónico" autocomplete="username">
                 </div>
@@ -64,6 +71,32 @@
                     Entrar al Panel
                 </button>
             </div>
+
+            <form class="login-body" id="panelRegistro" role="tabpanel" aria-labelledby="tabRegistro" novalidate hidden>
+                <div class="input-group">
+                    <input type="text" id="regNombre" placeholder="Nombre completo" aria-label="Nombre completo" autocomplete="name" required>
+                </div>
+                <div class="input-group">
+                    <input type="email" id="regEmail" placeholder="Correo electrónico" aria-label="Correo electrónico" autocomplete="email" required>
+                </div>
+                <div class="input-group">
+                    <input type="password" id="regPass" placeholder="Contraseña (mínimo 8 caracteres)" aria-label="Contraseña" autocomplete="new-password" minlength="8" required>
+                </div>
+                <div class="input-group">
+                    <select id="regTipo" aria-label="Tipo de cuenta" required>
+                        <!-- Sólo los roles con auto-registro, cargados desde /api/roles -->
+                    </select>
+                </div>
+                <div class="input-group" id="regCampoProtectora" hidden>
+                    <select id="regProtectora" aria-label="Protectora a la que perteneces">
+                        <option value="">— Selecciona tu protectora —</option>
+                    </select>
+                </div>
+                <p class="login-ayuda" id="regAyuda"></p>
+                <button type="submit" id="btnRegistrar" class="btn-login">
+                    Crear mi cuenta
+                </button>
+            </form>
         </div>
     </div>
 
@@ -107,11 +140,11 @@
 
         <!-- ANIMALES -->
         <section class="card" data-permiso="animales:gestionar" hidden>
-            <h2>🐕 Animales</h2>
+            <h2>🐕 <span id="tituloAnimales">Animales</span></h2>
             <form id="animalForm" class="admin-form">
                 <input type="text" id="nombre" placeholder="Nombre del animal" required>
                 <input type="text" id="especie" placeholder="Especie (perro, gato…)" required>
-                <input type="number" id="edad" placeholder="Edad (años)" min="0">
+                <input type="number" id="edad" placeholder="Edad (años)" min="0" max="40">
                 <select id="selectProtectora" required>
                     <option value="">— Selecciona protectora —</option>
                 </select>
@@ -164,6 +197,38 @@
                     </tr>
                 </tbody>
             </table>
+        </div>
+    </section>
+
+
+    <!-- ===== CATÁLOGO DE ADOPCIÓN (rol Adoptante) ===== -->
+    <section class="admin-panel" id="panelCatalogo" data-permiso="animales:consultar" hidden
+             aria-labelledby="panelCatalogoTitulo">
+        <div class="panel-head">
+            <div>
+                <h2 id="panelCatalogoTitulo"><i class="fa-solid fa-heart"></i> Animales en adopción</h2>
+                <p class="panel-sub">Encuentra a tu futuro compañero entre los animales disponibles.</p>
+            </div>
+            <div class="panel-tools">
+                <div class="search-wrap">
+                    <i class="fa-solid fa-magnifying-glass" aria-hidden="true"></i>
+                    <input type="search" id="buscarCatalogo" placeholder="Buscar por nombre o especie"
+                           aria-label="Buscar animales">
+                </div>
+                <select id="filtroEspecie" class="filtro-select" aria-label="Filtrar por especie">
+                    <option value="">Todas las especies</option>
+                </select>
+                <select id="filtroProtectoraCat" class="filtro-select" aria-label="Filtrar por protectora">
+                    <option value="">Todas las protectoras</option>
+                </select>
+            </div>
+        </div>
+
+        <div class="catalogo-wrap">
+            <p class="catalogo-contador" id="catalogoContador" aria-live="polite"></p>
+            <div class="catalogo-grid" id="catalogoGrid">
+                <p class="catalogo-vacio"><i class="fa-solid fa-paw"></i> Cargando animales…</p>
+            </div>
         </div>
     </section>
 
@@ -222,6 +287,57 @@
         </form>
     </dialog>
 
+
+    <!-- ===== MODAL DE EDICIÓN DE ANIMAL ===== -->
+    <dialog id="modalAnimal" class="modal" aria-labelledby="modalAnimalTitulo">
+        <form id="formAnimalEditar" method="dialog" class="modal-form" novalidate>
+            <div class="modal-head">
+                <h3 id="modalAnimalTitulo">Editar animal</h3>
+                <button type="button" class="btn-cerrar" id="btnCerrarModalAnimal" aria-label="Cerrar">
+                    <i class="fa-solid fa-xmark"></i>
+                </button>
+            </div>
+
+            <div class="modal-body">
+                <input type="hidden" id="a_id">
+
+                <label class="campo">
+                    <span>Nombre</span>
+                    <input type="text" id="a_nombre" required>
+                </label>
+
+                <label class="campo">
+                    <span>Especie</span>
+                    <input type="text" id="a_especie" required>
+                </label>
+
+                <label class="campo">
+                    <span>Edad <small>(años)</small></span>
+                    <input type="number" id="a_edad" min="0" max="40">
+                </label>
+
+                <label class="campo">
+                    <span>Estado</span>
+                    <select id="a_estado">
+                        <option value="Disponible">Disponible</option>
+                        <option value="Reservado">Reservado</option>
+                        <option value="Adoptado">Adoptado</option>
+                    </select>
+                </label>
+
+                <p class="modal-error" id="modalAnimalError" hidden role="alert"></p>
+            </div>
+
+            <div class="modal-foot">
+                <button type="button" class="btn-secundario" id="btnCancelarModalAnimal">Cancelar</button>
+                <button type="submit" class="btn-add btn-compact" id="btnGuardarAnimal">
+                    <i class="fa-solid fa-floppy-disk"></i> Guardar
+                </button>
+            </div>
+        </form>
+    </dialog>
+
     <script src="scripts.js" defer></script>
+    <script src="registro-catalogo.js" defer></script>
 </body>
 </html>

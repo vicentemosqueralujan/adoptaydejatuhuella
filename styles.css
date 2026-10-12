@@ -500,14 +500,22 @@ header {
     border-radius: 20px;
     box-shadow: var(--shadow-lg);
     width: min(460px, calc(100vw - 2rem));
+    /* El diálogo nunca supera la ventana: el cuerpo scrollea y el pie queda fijo. */
+    max-height: 85vh;
+    overflow: hidden;
     color: var(--text);
 }
 .modal::backdrop { background: rgba(15, 23, 42, 0.55); backdrop-filter: blur(3px); }
 
-.modal-form { display: flex; flex-direction: column; font-family: var(--font); }
+.modal-form {
+    display: flex; flex-direction: column;
+    max-height: 85vh;
+    font-family: var(--font);
+}
 
 .modal-head {
     display: flex; align-items: center; justify-content: space-between;
+    flex-shrink: 0;                      /* la cabecera no se comprime al scrollear */
     padding: 1.25rem 1.5rem;
     border-bottom: 1px solid var(--border);
 }
@@ -523,7 +531,15 @@ header {
 }
 .btn-cerrar:hover { background: var(--danger-light); color: var(--danger); }
 
-.modal-body { padding: 1.25rem 1.5rem; display: flex; flex-direction: column; gap: 0.9rem; }
+/* Única zona que crece y scrollea: así el pie con Cancelar/Guardar nunca se desborda. */
+.modal-body {
+    padding: 1.25rem 1.5rem;
+    display: flex; flex-direction: column; gap: 0.9rem;
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+}
 
 .campo { display: flex; flex-direction: column; gap: 0.35rem; }
 .campo > span { font-size: 0.8rem; font-weight: 700; }
@@ -555,11 +571,14 @@ header {
 
 .modal-foot {
     display: flex; justify-content: flex-end; gap: 0.6rem;
+    flex-shrink: 0;                      /* pie fijo, siempre visible */
+    flex-wrap: wrap;
     padding: 1rem 1.5rem;
     border-top: 1px solid var(--border);
     background: #f8fafc;
     border-radius: 0 0 20px 20px;
 }
+.modal-foot button { flex: 0 1 auto; }
 
 .btn-secundario {
     padding: 0.6rem 1.1rem;
@@ -592,4 +611,136 @@ header {
     }
     .tabla-usuarios td.col-acciones { text-align: left; padding-top: 0.75rem; }
     .sesion-datos { display: none; }
+}
+
+/* =============================================
+   PESTAÑAS DE ACCESO / REGISTRO
+   ============================================= */
+.login-tabs {
+    display: flex; gap: 0.25rem;
+    padding: 0.25rem;
+    margin-bottom: 1.25rem;
+    background: #f1f5f9;
+    border-radius: 999px;
+}
+
+.login-tab {
+    flex: 1;
+    padding: 0.55rem 0.75rem;
+    border: none; background: transparent;
+    border-radius: 999px;
+    font-family: var(--font); font-size: 0.85rem; font-weight: 700;
+    color: var(--text-muted); cursor: pointer;
+    transition: background .2s, color .2s, box-shadow .2s;
+}
+.login-tab:hover { color: var(--text); }
+.login-tab.is-active {
+    background: var(--surface);
+    color: var(--primary);
+    box-shadow: 0 1px 3px rgba(0,0,0,.08);
+}
+
+.login-body select {
+    width: 100%;
+    padding: 0.9rem 1rem;
+    border: 1.5px solid var(--border);
+    border-radius: var(--radius-sm);
+    font-family: var(--font); font-size: 0.95rem;
+    background: #f8fafc; color: var(--text);
+    transition: border-color .2s, background .2s;
+}
+.login-body select:focus {
+    outline: none; border-color: var(--primary); background: #fff;
+    box-shadow: 0 0 0 3px rgba(67, 97, 238, 0.12);
+}
+
+.login-ayuda {
+    min-height: 1.1em; margin-bottom: 0.5rem;
+    font-size: 0.78rem; color: var(--text-muted); text-align: left;
+}
+
+/* =============================================
+   CATÁLOGO DE ADOPCIÓN
+   ============================================= */
+.filtro-select {
+    padding: 0.6rem 0.9rem;
+    border: 1.5px solid var(--border);
+    border-radius: var(--radius-sm);
+    font-family: var(--font); font-size: 0.85rem;
+    background: #f8fafc; color: var(--text);
+    cursor: pointer;
+    transition: border-color .2s, background .2s;
+}
+.filtro-select:focus { outline: none; border-color: var(--primary); background: #fff; }
+
+.catalogo-wrap {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-top: none;
+    border-radius: 0 0 var(--radius) var(--radius);
+    box-shadow: var(--shadow);
+    padding: 1.25rem 1.5rem 1.5rem;
+}
+
+.catalogo-contador {
+    margin-bottom: 1rem;
+    font-size: 0.8rem; font-weight: 600; color: var(--text-muted);
+}
+
+.catalogo-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(210px, 1fr));
+    gap: 1rem;
+}
+
+.animal-card {
+    display: flex; flex-direction: column;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    overflow: hidden;
+    background: var(--surface);
+    transition: transform .18s ease, box-shadow .18s ease, border-color .18s ease;
+}
+.animal-card:hover {
+    transform: translateY(-3px);
+    box-shadow: var(--shadow-lg);
+    border-color: var(--primary);
+}
+
+.animal-figura {
+    height: 120px;
+    display: grid; place-items: center;
+    background: linear-gradient(135deg, var(--primary-light) 0%, #e0e7ff 100%);
+    font-size: 2.6rem; color: var(--primary);
+}
+
+.animal-cuerpo { padding: 0.9rem 1rem 1rem; display: flex; flex-direction: column; gap: 0.4rem; }
+.animal-cuerpo h3 { font-size: 1rem; font-weight: 800; line-height: 1.2; }
+
+.animal-meta {
+    display: flex; flex-wrap: wrap; align-items: center; gap: 0.4rem;
+    font-size: 0.78rem; color: var(--text-muted);
+}
+.animal-meta .sep { opacity: 0.4; }
+
+.animal-protectora {
+    display: flex; align-items: center; gap: 0.35rem;
+    margin-top: 0.15rem;
+    font-size: 0.76rem; color: var(--text-muted);
+}
+.animal-protectora i { color: var(--primary); }
+
+.catalogo-vacio {
+    grid-column: 1 / -1;
+    padding: 2.5rem 1rem;
+    text-align: center; color: #94a3b8; font-size: 0.9rem;
+}
+.catalogo-vacio i { display: block; font-size: 1.8rem; margin-bottom: 0.6rem; opacity: 0.5; }
+
+.badge-reservado { background: #fef3c7; color: #92400e; }
+
+@media (max-width: 768px) {
+    .catalogo-wrap { padding: 1rem; }
+    .catalogo-grid { grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 0.75rem; }
+    .filtro-select { width: 100%; }
 }

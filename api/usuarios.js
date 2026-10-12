@@ -2,7 +2,10 @@ const { sql } = require('@vercel/postgres');
 const bcrypt  = require('bcryptjs');
 const crypto  = require('crypto');
 
-const { ROL_POR_DEFECTO, esRolValido, requiereProtectora, VALORES_VALIDOS } = require('./_roles.js');
+const {
+    ROL_POR_DEFECTO, esRolValido, requiereProtectora, permiteAutoRegistro,
+    VALORES_VALIDOS, ROLES_AUTOREGISTRO,
+} = require('./_roles.js');
 const { identificarSolicitante, existeAdministrador, puede } = require('./_auth.js');
 
 const PERMISO_GESTION = 'usuarios:gestionar';
@@ -99,16 +102,17 @@ module.exports = async function handler(req, res) {
 
             const emailNormalizado = normalizarEmail(email);
 
-            // Dos modos de alta:
-            //  · Arranque  — todavía no hay ningún Admin: solo entra la lista blanca.
-            //  · Gestionado — ya hay Admin: el alta la hace un gestor autenticado,
-            //    que puede dar de alta cualquier correo con cualquier rol.
-            if (!esGestor) {
-                if (await existeAdministrador())
-                    return res.status(solicitante ? 403 : 401)
-                              .json({ error: 'Se requieren permisos de gestión de usuarios' });
+            // Tres modos de alta:
+            //  · Gestionado   — un gestor autenticado: cualquier correo y cualquier rol.
+            //  · Arranque     — aún no hay ningún Admin: sólo entra la lista blanca.
+            //  · Auto-registro— ya hay Admin y nadie autenticado: registro público,
+            //    limitado a los roles marcados con `autoRegistro` (nunca Admin).
+            let esAutoRegistro = false;
 
-                if (!EMAILS_PERMITIDOS.includes(emailNormalizado)) {
+            if (!esGestor) {
+                if (await existeAdministrador()) {
+                    esAutoRegistro = true;
+                } else if (!EMAILS_PERMITIDOS.includes(emailNormalizado)) {
                     console.warn('[USUARIOS] Alta rechazada para email no autorizado:', emailNormalizado);
                     return res.status(403).json({
                         error: 'El registro público está restringido. Este correo no está autorizado para darse de alta.'
@@ -121,6 +125,20 @@ module.exports = async function handler(req, res) {
 
             const { rol, idProtectora, error } = resolverRolYProtectora(tipo, id_protectora);
             if (error) return res.status(400).json({ error });
+
+            if (esAutoRegistro) {
+                // Escalada de privilegios: nadie se concede a sí mismo un rol de gestión.
+                if (!permiteAutoRegistro(rol)) {
+                    console.warn('[USUARIOS] Auto-registro rechazado para el rol', rol, '-', emailNormalizado);
+                    return res.status(403).json({
+                        error: `El rol "${rol}" no está disponible en el registro público. Roles permitidos: ${ROLES_AUTOREGISTRO.join(', ')}`
+                    });
+                }
+                // En el registro público la contraseña la elige la persona: no se
+                // generan temporales que nadie podría recibir.
+                if (password === undefined)
+                    return res.status(400).json({ error: 'La contraseña es obligatoria para registrarse' });
+            }
 
             // Si el panel no envía contraseña se genera una temporal: nunca se guarda
             // una contraseña fija ni en texto plano.
