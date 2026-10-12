@@ -2,11 +2,43 @@
 <html lang="es">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Dashboard — Adopta y Deja tu Huella</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <title>Panel Administrativo — Adopta y Deja tu Huella</title>
+    <meta name="description" content="Panel administrativo de Adopta y Deja tu Huella: gestión CRUD de protectoras, usuarios y animales en adopción.">
+    <meta name="author" content="Grupo 6 — 2º DAW (IFP)">
+    <meta name="robots" content="noindex, nofollow">
+    <meta name="color-scheme" content="light">
+
+    <!-- ===== PWA / Mobile ===== -->
+    <link rel="manifest" href="/manifest.json">
+    <meta name="theme-color" content="#4361ee">
+    <meta name="application-name" content="Adopta y Deja tu Huella">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-title" content="Adopta">
+    <meta name="apple-mobile-web-app-status-bar-style" content="default">
+    <meta name="format-detection" content="telephone=no">
+
+    <!-- ===== Favicons ===== -->
+    <link rel="icon" href="/favicon.ico" sizes="48x48">
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" sizes="any">
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" sizes="180x180">
+
+    <!-- ===== Open Graph / Twitter ===== -->
+    <meta property="og:type" content="website">
+    <meta property="og:site_name" content="Adopta y Deja tu Huella">
+    <meta property="og:title" content="Panel Administrativo — Adopta y Deja tu Huella">
+    <meta property="og:description" content="Gestión CRUD de protectoras, usuarios y animales en adopción.">
+    <meta property="og:image" content="/icon-512.png">
+    <meta property="og:locale" content="es_ES">
+    <meta name="twitter:card" content="summary">
+
+    <!-- ===== Estilos y dependencias ===== -->
+    <link rel="preconnect" href="https://cdnjs.cloudflare.com" crossorigin>
+    <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
     <link rel="stylesheet" href="styles.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
-    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11" defer></script>
 </head>
 <body>
 
@@ -22,11 +54,11 @@
             </div>
             <div class="login-body">
                 <div class="input-group">
-                    <input type="email" id="loginEmail" placeholder="Correo electrónico" autocomplete="off">
+                    <input type="email" id="loginEmail" placeholder="Correo electrónico" aria-label="Correo electrónico" autocomplete="username">
                 </div>
                 <div class="input-group">
-                    <input type="password" id="loginPass" placeholder="Contraseña">
-                    <button type="button" id="togglePass" class="btn-eye" tabindex="-1"><i class="fa-solid fa-eye"></i></button>
+                    <input type="password" id="loginPass" placeholder="Contraseña" aria-label="Contraseña" autocomplete="current-password">
+                    <button type="button" id="togglePass" class="btn-eye" aria-label="Mostrar u ocultar la contraseña" tabindex="-1"><i class="fa-solid fa-eye"></i></button>
                 </div>
                 <button id="btnEntrar" class="btn-login">
                     Entrar al Panel
@@ -104,6 +136,6 @@
 
     </main>
 
-    <script src="scripts.js"></script>
+    <script src="scripts.js" defer></script>
 </body>
 </html>

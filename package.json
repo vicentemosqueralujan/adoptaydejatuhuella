@@ -7,11 +7,17 @@
     "bcryptjs": "^3.0.3"
   },
   "scripts": {
+    "dev": "vercel dev",
+    "dev:local": "node tools/dev-server.js",
+    "icons": "python3 tools/generate-icons.py",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "repository": {
     "type": "git",
     "url": "git+https://github.com/vicentemosqueralujan/adoptaydejatuhuella.git"
   },
-  "license": "ISC"
+  "license": "ISC",
+  "engines": {
+    "node": ">=18"
+  }
 }
