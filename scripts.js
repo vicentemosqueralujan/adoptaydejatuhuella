@@ -1,6 +1,12 @@
-// ==========================================
-// ESTADO DE SESIÓN Y PERMISOS
-// ==========================================
+// ==========================================================================
+// Núcleo de la aplicación: sesión, permisos, acceso a la API, protectoras,
+// usuarios y perfil.
+//
+// Se carga después de js/icons.js y js/ui.js, de los que usa `icono()`,
+// `esc()`, `toast()`, `confirmar()`, `pedirTexto()` y `botonCargando()`.
+// registro-catalogo.js se carga después y completa el catálogo y la ficha.
+// ==========================================================================
+
 const CLAVE_SESION = 'adminSession';
 
 /** Estado en memoria. Se reemplaza entero en cada cambio, nunca se muta. */
@@ -14,7 +20,7 @@ let estado = {
     catalogo: [],
     favoritos: [],
     filtroUsuarios: '',
-    filtroCatalogo: { q: '', especie: '', protectora: '' },
+    filtroCatalogo: { q: '', especie: '', provincia: '', protectora: '' },
 };
 
 function actualizarEstado(cambios) {
@@ -32,45 +38,17 @@ function leerSesion() {
     }
 }
 
-function tienePermiso(permiso) {
-    return Array.isArray(estado.sesion?.permisos) && estado.sesion.permisos.includes(permiso);
+function haySesion() {
+    return Boolean(estado.sesion);
 }
 
-/** Muestra u oculta cada bloque según los permisos del usuario autenticado. */
-function aplicarPermisos() {
-    document.querySelectorAll('[data-permiso]').forEach(el => {
-        el.hidden = !tienePermiso(el.dataset.permiso);
-    });
-
-    const chip = document.getElementById('sesionChip');
-    const botonCuenta = document.getElementById('btnMiCuenta');
-
-    const sesion = estado.sesion;
-    // «Mis datos» es autoservicio: disponible para cualquier sesión, sea cual sea el rol.
-    if (botonCuenta) botonCuenta.hidden = !sesion;
-    if (!chip) return;
-
-    chip.hidden = !sesion;
-    if (!sesion) return;
-
-    document.getElementById('sesionNombre').textContent = sesion.nombre ?? '';
-    document.getElementById('sesionAvatar').textContent = iniciales(sesion.nombre);
-
-    const rol = document.getElementById('sesionRol');
-    rol.textContent = sesion.etiquetaRol ?? sesion.tipo ?? '';
-    rol.className = `badge badge-${String(sesion.tipo ?? '').toLowerCase()}`;
+function tienePermiso(permiso) {
+    return Array.isArray(estado.sesion?.permisos) && estado.sesion.permisos.includes(permiso);
 }
 
 // ==========================================
 // UTILIDADES
 // ==========================================
-
-/** Escapa texto antes de insertarlo en HTML: los datos vienen de la base de datos. */
-function esc(valor) {
-    return String(valor ?? '').replace(/[&<>"']/g, c => (
-        { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]
-    ));
-}
 
 function iniciales(nombre) {
     return String(nombre ?? '?')
@@ -80,10 +58,6 @@ function iniciales(nombre) {
         .map(p => p[0] ?? '')
         .join('')
         .toUpperCase() || '?';
-}
-
-function toast(titulo, icon = 'success') {
-    Swal.fire({ title: titulo, icon, toast: true, position: 'top-end', timer: 2000, showConfirmButton: false });
 }
 
 /** Envuelve fetch devolviendo siempre `{ ok, status, data }` sin lanzar por HTTP. */
@@ -101,38 +75,135 @@ async function peticion(url, opciones = {}) {
     return { ok: res.ok, status: res.status, data };
 }
 
+/** Muestra u oculta un mensaje de error dentro de un contenedor con `role="alert"`. */
+function mostrarError(id, mensaje) {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.textContent = mensaje ?? '';
+    el.hidden = !mensaje;
+}
+
+// ==========================================
+// VISIBILIDAD SEGÚN ROL
+// ==========================================
+
+/**
+ * Ajusta la interfaz al rol activo.
+ *
+ * El catálogo queda siempre visible: es público. Lo que cambia es la cabecera
+ * (accesos frente a identidad) y los bloques de gestión, que sólo aparecen
+ * para quien tiene el permiso correspondiente.
+ */
+function aplicarPermisos() {
+    document.querySelectorAll('[data-permiso]').forEach(el => {
+        el.hidden = !tienePermiso(el.dataset.permiso);
+    });
+
+    const sesion = estado.sesion;
+    const conSesion = Boolean(sesion);
+
+    // Accesos públicos frente a identidad de la sesión.
+    ['btnAccesoProtectoras', 'btnAccesoAdmin', 'btnAcceder'].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.hidden = conSesion;
+    });
+    ['btnMiCuenta', 'btnLogout', 'sesionChip'].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.hidden = !conSesion;
+    });
+
+    // «Mis favoritos» es una pestaña de usuario identificado.
+    const tabFavoritos = document.getElementById('tabFavoritos');
+    if (tabFavoritos) {
+        tabFavoritos.hidden = !conSesion;
+        // Al cerrar sesión la pestaña activa podría ser la de favoritos, que
+        // acaba de desaparecer: se vuelve al catálogo para no dejar vacío el panel.
+        if (!conSesion && tabFavoritos.classList.contains('is-active')) activarVista('tabCatalogo');
+    }
+
+    if (!conSesion) return;
+
+    document.getElementById('sesionNombre').textContent = sesion.nombre ?? '';
+    document.getElementById('sesionAvatar').textContent = iniciales(sesion.nombre);
+
+    const rol = document.getElementById('sesionRol');
+    rol.textContent = sesion.etiquetaRol ?? sesion.tipo ?? '';
+    rol.className = `badge badge-${String(sesion.tipo ?? '').toLowerCase()}`;
+}
+
+// ==========================================
+// MODAL DE ACCESO
+// ==========================================
+const modalAcceso = document.getElementById('modalAcceso');
+
+const MENSAJES_ACCESO = {
+    Admin:      'Acceso reservado a la administración de la plataforma.',
+    Protectora: 'Entra con la cuenta de tu protectora para gestionar tus animales.',
+    favorito:   'Crea tu cuenta para guardar animales en favoritos.',
+    adopcion:   'Necesitas una cuenta de adoptante para solicitar una adopción.',
+    general:    'Entra con tu cuenta o crea una nueva.',
+};
+
+/**
+ * Abre el acceso con un mensaje acorde al motivo.
+ * @param {'Admin'|'Protectora'|'favorito'|'adopcion'|'general'} motivo
+ */
+function abrirAcceso(motivo = 'general') {
+    if (!modalAcceso) return;
+
+    document.getElementById('accesoMensaje').textContent =
+        MENSAJES_ACCESO[motivo] ?? MENSAJES_ACCESO.general;
+
+    // Quien viene de favoritos o de una solicitud es un adoptante: se le ofrece
+    // directamente el registro, que es lo que le falta.
+    const pestana = ['favorito', 'adopcion'].includes(motivo) ? 'tabRegistro' : 'tabAcceder';
+    activarPestanaAcceso(pestana);
+    if (pestana === 'tabRegistro') prepararRegistroPublico();
+
+    mostrarError('loginError', null);
+    mostrarError('registroError', null);
+
+    modalAcceso.showModal();
+    document.getElementById(pestana === 'tabRegistro' ? 'regNombre' : 'loginEmail').focus();
+}
+
+function cerrarAcceso() {
+    modalAcceso?.close();
+}
+
+document.getElementById('btnAcceder')?.addEventListener('click', () => abrirAcceso('general'));
+document.getElementById('btnCerrarAcceso')?.addEventListener('click', cerrarAcceso);
+
+document.querySelectorAll('[data-acceso]').forEach(boton => {
+    boton.addEventListener('click', () => abrirAcceso(boton.dataset.acceso));
+});
+
+document.getElementById('btnInicio')?.addEventListener('click', () => {
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+});
+
 // ==========================================
 // LOGIN
 // ==========================================
-const loginOverlay = document.getElementById('loginOverlay');
-const btnEntrar    = document.getElementById('btnEntrar');
-
 document.getElementById('togglePass')?.addEventListener('click', () => {
     const input = document.getElementById('loginPass');
-    const icon  = document.querySelector('#togglePass i');
+    const boton = document.getElementById('togglePass');
     const oculta = input.type === 'password';
     input.type = oculta ? 'text' : 'password';
-    icon.classList.replace(oculta ? 'fa-eye' : 'fa-eye-slash', oculta ? 'fa-eye-slash' : 'fa-eye');
+    boton.innerHTML = icono(oculta ? 'ojo-oculto' : 'ojo', 18);
+    boton.setAttribute('aria-pressed', String(oculta));
 });
 
-if (btnEntrar) {
-    btnEntrar.addEventListener('click', handleLogin);
-    ['loginEmail', 'loginPass'].forEach(id => {
-        document.getElementById(id)?.addEventListener('keydown', e => {
-            if (e.key === 'Enter') handleLogin();
-        });
-    });
-}
+document.getElementById('panelAcceder')?.addEventListener('submit', async e => {
+    e.preventDefault();
+    mostrarError('loginError', null);
 
-async function handleLogin() {
     const email = document.getElementById('loginEmail').value.trim();
-    const pass  = document.getElementById('loginPass').value.trim();
+    const pass  = document.getElementById('loginPass').value;
 
-    if (!email || !pass) return mostrarErrorLogin('Rellena todos los campos');
+    if (!email || !pass) return mostrarError('loginError', 'Rellena todos los campos');
 
-    btnEntrar.disabled = true;
-    const originalHTML = btnEntrar.innerHTML;
-    btnEntrar.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Verificando...';
+    const restaurar = botonCargando(document.getElementById('btnEntrar'), 'Verificando…');
 
     try {
         const { ok, data } = await peticion('/api/login', {
@@ -140,84 +211,67 @@ async function handleLogin() {
             body: JSON.stringify({ email, password: pass }),
         });
 
-        if (!ok || !data?.success) throw new Error(data?.message || 'Credenciales incorrectas');
+        if (!ok || !data?.success)
+            return mostrarError('loginError', data?.message || 'Credenciales incorrectas');
 
         // La respuesta del login ya trae rol, protectora y permisos: el panel se
         // puede renderizar sin una segunda petición.
         localStorage.setItem(CLAVE_SESION, JSON.stringify(data.user));
         actualizarEstado({ sesion: data.user });
 
-        btnEntrar.style.background = '#10b981';
-        btnEntrar.innerHTML = `<i class="fas fa-check"></i> ¡Bienvenido, ${esc(data.user.nombre)}!`;
-
-        await Swal.fire({
-            title: '¡Acceso concedido!',
-            text: `Bienvenido de nuevo, ${data.user.nombre} (${data.user.etiquetaRol ?? data.user.tipo})`,
-            icon: 'success', timer: 1400, showConfirmButton: false, timerProgressBar: true,
-        });
-
-        loginOverlay.style.transition = 'opacity 0.4s ease';
-        loginOverlay.style.opacity = '0';
-        setTimeout(() => { loginOverlay.style.display = 'none'; iniciarPanel(); }, 400);
-
+        cerrarAcceso();
+        e.target.reset();
+        toast(`Hola de nuevo, ${data.user.nombre}`);
+        await iniciarPanel();
     } catch (error) {
-        mostrarErrorLogin(error.message);
-        btnEntrar.disabled = false;
-        btnEntrar.innerHTML = originalHTML;
+        mostrarError('loginError', 'Error de red: ' + error.message);
+    } finally {
+        restaurar();
     }
-}
+});
 
-function mostrarErrorLogin(mensaje) {
-    const card = document.querySelector('.login-card');
-    card?.classList.add('shake');
-    setTimeout(() => card?.classList.remove('shake'), 500);
-
-    let errorEl = document.getElementById('loginError');
-    if (!errorEl) {
-        errorEl = document.createElement('p');
-        errorEl.id = 'loginError';
-        errorEl.className = 'login-error';
-        document.querySelector('.login-body')?.appendChild(errorEl);
-    }
-    errorEl.textContent = '⚠ ' + mensaje;
-    errorEl.style.opacity = '1';
-
-    clearTimeout(errorEl._timer);
-    errorEl._timer = setTimeout(() => { errorEl.style.opacity = '0'; }, 4000);
-}
-
-document.getElementById('btnLogout')?.addEventListener('click', () => {
-    Swal.fire({
-        title: '¿Cerrar sesión?', icon: 'question', showCancelButton: true,
-        confirmButtonColor: '#ef233c', cancelButtonText: 'Cancelar', confirmButtonText: 'Sí, salir',
-    }).then(r => {
-        if (r.isConfirmed) { localStorage.removeItem(CLAVE_SESION); location.reload(); }
+document.getElementById('btnLogout')?.addEventListener('click', async () => {
+    const salir = await confirmar({
+        titulo: '¿Cerrar sesión?',
+        mensaje: 'Volverás al catálogo público. Tus favoritos se conservan en este navegador.',
+        confirmar: 'Cerrar sesión',
     });
+    if (!salir) return;
+
+    localStorage.removeItem(CLAVE_SESION);
+    actualizarEstado({ sesion: null, usuarios: [], animales: [], favoritos: [] });
+    aplicarPermisos();
+    await iniciarPanel();
+    toast('Sesión cerrada', 'info');
 });
 
 // ==========================================
-// ARRANQUE DEL PANEL
+// ARRANQUE
 // ==========================================
+
+/**
+ * Pinta lo que corresponde al estado actual de sesión.
+ *
+ * Se invoca también sin sesión: el catálogo y las protectoras son públicos y
+ * deben cargarse igualmente.
+ */
 async function iniciarPanel() {
     aplicarPermisos();
     configurarPanelAnimales();
 
-    // El catálogo de roles y las protectoras alimentan los desplegables.
     await Promise.all([cargarCatalogoRoles(), cargarProtectoras()]);
 
     // Los favoritos son locales: se leen antes de pintar para que los corazones
     // salgan ya marcados en el primer render del catálogo.
-    if (tienePermiso('animales:consultar')) {
-        actualizarEstado({ favoritos: leerFavoritos() });
-        actualizarContadorFavoritos();
-    }
+    actualizarEstado({ favoritos: leerFavoritos() });
+    actualizarContadorFavoritos();
 
     // Cada rol carga sólo lo que puede ver: el adoptante no pide el listado de
     // gestión y la protectora no pide el de usuarios.
     await Promise.all([
+        cargarCatalogo(),
         tienePermiso('usuarios:gestionar') ? cargarUsuarios() : Promise.resolve(),
         tienePermiso('animales:gestionar') ? cargarAnimales() : Promise.resolve(),
-        tienePermiso('animales:consultar') ? cargarCatalogo() : Promise.resolve(),
     ]);
 }
 
@@ -229,15 +283,15 @@ async function cargarCatalogoRoles() {
         actualizarEstado({ roles: data.roles ?? [], rolPorDefecto: data.porDefecto ?? 'Adoptante' });
 
         const select = document.getElementById('u_tipo');
-        if (!select) return;
-
-        // El desplegable se construye desde la API: añadir un rol en el backend
-        // lo hace aparecer aquí sin tocar el frontend.
-        select.innerHTML = estado.roles
-            .map(r => `<option value="${esc(r.valor)}">${esc(r.etiqueta)}</option>`)
-            .join('');
-        select.value = estado.rolPorDefecto;
-        sincronizarCampoProtectora();
+        if (select) {
+            // El desplegable se construye desde la API: añadir un rol en el backend
+            // lo hace aparecer aquí sin tocar el frontend.
+            select.innerHTML = estado.roles
+                .map(r => `<option value="${esc(r.valor)}">${esc(r.etiqueta)}</option>`)
+                .join('');
+            select.value = estado.rolPorDefecto;
+            sincronizarCampoProtectora();
+        }
 
         // El registro público sólo ofrece los roles marcados con `autoRegistro`:
         // `Admin` queda excluido en origen, no por una lista repetida en el cliente.
@@ -249,7 +303,6 @@ async function cargarCatalogoRoles() {
                 ? publicos.map(r => `<option value="${esc(r.valor)}">${esc(r.etiqueta)}</option>`).join('')
                 : '<option value="" disabled selected>No se pudieron cargar los roles</option>';
 
-            // Arranca en el rol por defecto del catálogo si es de registro público.
             if (publicos.some(r => r.valor === estado.rolPorDefecto))
                 selectRegistro.value = estado.rolPorDefecto;
 
@@ -271,38 +324,14 @@ async function cargarProtectoras() {
         const protectoras = Array.isArray(data) ? data : [];
         actualizarEstado({ protectoras });
 
-        const lista = document.getElementById('listaProtectoras');
-        if (lista) {
-            lista.innerHTML = protectoras.length
-                ? protectoras.map(p => `
-                    <li class="item-lista">
-                        <span>
-                            <i class="fa-solid fa-house-chimney" style="color:#4361ee;margin-right:8px"></i>
-                            ${esc(p.nombre_protectora)}
-                        </span>
-                        <div class="btn-group">
-                            <button type="button" class="btn-edit" title="Editar"
-                                    data-accion="editar" data-entidad="protectoras"
-                                    data-id="${p.id_protectora}" data-nombre="${esc(p.nombre_protectora)}">
-                                <i class="fa-solid fa-pen"></i>
-                            </button>
-                            <button type="button" class="btn-del" title="Eliminar"
-                                    data-accion="eliminar" data-entidad="protectoras" data-id="${p.id_protectora}">
-                                <i class="fa-solid fa-trash"></i>
-                            </button>
-                        </div>
-                    </li>`).join('')
-                : '<li class="empty-state"><i class="fa-solid fa-inbox"></i> Sin registros</li>';
-        }
+        renderProtectoras();
 
         const opciones = protectoras
             .map(p => `<option value="${p.id_protectora}">${esc(p.nombre_protectora)}</option>`)
             .join('');
 
-        const selAnimal = document.getElementById('selectProtectora');
-        if (selAnimal) selAnimal.innerHTML = '<option value="">— Selecciona protectora —</option>' + opciones;
-
-        [['u_protectora', '— Selecciona protectora —'],
+        [['a_protectora', '— Selecciona protectora —'],
+         ['u_protectora', '— Selecciona protectora —'],
          ['regProtectora', '— Selecciona tu protectora —'],
          ['filtroProtectoraCat', 'Todas las protectoras']].forEach(([id, vacio]) => {
             const sel = document.getElementById(id);
@@ -314,6 +343,39 @@ async function cargarProtectoras() {
     } catch (e) {
         console.error('[cargarProtectoras]', e.message);
     }
+}
+
+function renderProtectoras() {
+    const lista = document.getElementById('listaProtectoras');
+    if (!lista) return;
+
+    if (!estado.protectoras.length) {
+        lista.innerHTML = `<li class="estado-vacio">${icono('inbox', 24)}<span>Sin protectoras registradas</span></li>`;
+        return;
+    }
+
+    lista.innerHTML = estado.protectoras.map(p => `
+        <li class="item-lista">
+            <span class="item-lista-datos">
+                ${icono('casa', 20)}
+                <span class="item-lista-texto">
+                    <strong>${esc(p.nombre_protectora)}</strong>
+                    ${p.ubicacion ? `<small>${esc(p.ubicacion)}</small>` : ''}
+                </span>
+            </span>
+            <span class="acciones-fila">
+                <button type="button" class="btn-icono" title="Editar" aria-label="Editar ${esc(p.nombre_protectora)}"
+                        data-accion="editar" data-entidad="protectoras"
+                        data-id="${p.id_protectora}" data-nombre="${esc(p.nombre_protectora)}">
+                    ${icono('editar', 18)}
+                </button>
+                <button type="button" class="btn-icono es-peligro" title="Eliminar"
+                        aria-label="Eliminar ${esc(p.nombre_protectora)}"
+                        data-accion="eliminar" data-entidad="protectoras" data-id="${p.id_protectora}">
+                    ${icono('eliminar', 18)}
+                </button>
+            </span>
+        </li>`).join('');
 }
 
 // ==========================================
@@ -348,8 +410,11 @@ function renderUsuarios() {
     const filas = usuariosFiltrados();
 
     if (!filas.length) {
-        const mensaje = estado.filtroUsuarios ? 'Ningún usuario coincide con la búsqueda' : 'Sin registros';
-        tbody.innerHTML = `<tr class="fila-vacia"><td colspan="5"><i class="fa-solid fa-inbox"></i> ${mensaje}</td></tr>`;
+        const mensaje = estado.filtroUsuarios ? 'Ningún usuario coincide con la búsqueda' : 'Sin usuarios registrados';
+        tbody.innerHTML = `
+            <tr class="fila-vacia">
+                <td colspan="5"><div class="estado-vacio">${icono('inbox', 24)}<span>${esc(mensaje)}</span></div></td>
+            </tr>`;
         return;
     }
 
@@ -357,7 +422,7 @@ function renderUsuarios() {
         <tr>
             <td>
                 <div class="celda-usuario">
-                    <span class="sesion-avatar" aria-hidden="true">${esc(iniciales(u.nombre_usuario))}</span>
+                    <span class="avatar" aria-hidden="true">${esc(iniciales(u.nombre_usuario))}</span>
                     <b>${esc(u.nombre_usuario)}</b>
                 </div>
             </td>
@@ -367,14 +432,16 @@ function renderUsuarios() {
                 ? esc(u.nombre_protectora)
                 : '<span class="sin-asignar">Sin asignar</span>'}</td>
             <td class="col-acciones">
-                <div class="btn-group">
-                    <button type="button" class="btn-edit" title="Editar usuario"
+                <div class="acciones-fila">
+                    <button type="button" class="btn-icono" title="Editar usuario"
+                            aria-label="Editar ${esc(u.nombre_usuario)}"
                             data-accion="editar-usuario" data-id="${u.id_usuario}">
-                        <i class="fa-solid fa-pen"></i>
+                        ${icono('editar', 18)}
                     </button>
-                    <button type="button" class="btn-del" title="Eliminar usuario"
+                    <button type="button" class="btn-icono es-peligro" title="Eliminar usuario"
+                            aria-label="Eliminar ${esc(u.nombre_usuario)}"
                             data-accion="eliminar" data-entidad="usuarios" data-id="${u.id_usuario}">
-                        <i class="fa-solid fa-user-xmark"></i>
+                        ${icono('eliminar', 18)}
                     </button>
                 </div>
             </td>
@@ -424,35 +491,19 @@ function abrirModalUsuario(usuario = null) {
         ? '(déjalo en blanco para mantener la actual)'
         : '(mínimo 8 caracteres; en blanco genera una temporal)';
 
-    ocultarErrorModal();
+    mostrarError('modalError', null);
     sincronizarCampoProtectora();
     modalUsuario.showModal();
     document.getElementById('u_nombre').focus();
 }
 
-function cerrarModalUsuario() {
-    modalUsuario?.close();
-}
-
-function mostrarErrorModal(mensaje) {
-    const el = document.getElementById('modalError');
-    if (!el) return;
-    el.textContent = mensaje;
-    el.hidden = false;
-}
-
-function ocultarErrorModal() {
-    const el = document.getElementById('modalError');
-    if (el) { el.hidden = true; el.textContent = ''; }
-}
-
 document.getElementById('btnNuevoUsuario')?.addEventListener('click', () => abrirModalUsuario());
-document.getElementById('btnCerrarModal')?.addEventListener('click', cerrarModalUsuario);
-document.getElementById('btnCancelarModal')?.addEventListener('click', cerrarModalUsuario);
+document.getElementById('btnCerrarModal')?.addEventListener('click', () => modalUsuario?.close());
+document.getElementById('btnCancelarModal')?.addEventListener('click', () => modalUsuario?.close());
 
 document.getElementById('formUsuario')?.addEventListener('submit', async e => {
     e.preventDefault();
-    ocultarErrorModal();
+    mostrarError('modalError', null);
 
     const id       = document.getElementById('u_id').value;
     const nombre   = document.getElementById('u_nombre').value.trim();
@@ -461,20 +512,17 @@ document.getElementById('formUsuario')?.addEventListener('submit', async e => {
     const tipo     = document.getElementById('u_tipo').value;
     const protectora = document.getElementById('u_protectora').value;
 
-    if (!nombre || !email) return mostrarErrorModal('Nombre y correo son obligatorios');
+    if (!nombre || !email) return mostrarError('modalError', 'Nombre y correo son obligatorios');
 
     const definicion = estado.roles.find(r => r.valor === tipo);
     if (definicion?.requiereProtectora && !protectora)
-        return mostrarErrorModal(`El rol "${definicion.etiqueta}" necesita una protectora asignada`);
+        return mostrarError('modalError', `El rol «${definicion.etiqueta}» necesita una protectora asignada`);
 
     // Solo se envían los campos informados: el backend conserva el resto.
     const cuerpo = { nombre, email, tipo, id_protectora: protectora || null };
     if (password) cuerpo.password = password;
 
-    const boton = document.getElementById('btnGuardarUsuario');
-    const textoOriginal = boton.innerHTML;
-    boton.disabled = true;
-    boton.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Guardando...';
+    const restaurar = botonCargando(document.getElementById('btnGuardarUsuario'));
 
     try {
         const { ok, data } = await peticion(
@@ -482,68 +530,23 @@ document.getElementById('formUsuario')?.addEventListener('submit', async e => {
             { method: id ? 'PATCH' : 'POST', body: JSON.stringify(cuerpo) }
         );
 
-        if (!ok) return mostrarErrorModal(data?.error || 'No se pudo guardar el usuario');
+        if (!ok) return mostrarError('modalError', data?.error || 'No se pudo guardar el usuario');
 
-        cerrarModalUsuario();
+        modalUsuario?.close();
         await cargarUsuarios();
 
         if (data?.passwordTemporal) {
-            await Swal.fire({
-                title: 'Usuario creado',
-                html: `Contraseña temporal (se muestra una sola vez):<br><code>${esc(data.passwordTemporal)}</code>`,
-                icon: 'success',
-            });
+            await aviso('Usuario creado',
+                `Contraseña temporal, se muestra una sola vez:<br><strong>${esc(data.passwordTemporal)}</strong>`);
         } else {
-            toast(id ? '¡Usuario actualizado!' : '¡Usuario creado!');
+            toast(id ? 'Usuario actualizado' : 'Usuario creado');
         }
     } catch (err) {
-        mostrarErrorModal('Error de red: ' + err.message);
+        mostrarError('modalError', 'Error de red: ' + err.message);
     } finally {
-        boton.disabled = false;
-        boton.innerHTML = textoOriginal;
+        restaurar();
     }
 });
-
-// ==========================================
-// ANIMALES
-// ==========================================
-async function cargarAnimales() {
-    try {
-        // El backend acota por sí solo: una protectora recibe únicamente los suyos.
-        const { ok, data } = await peticion('/api/animales');
-        if (!ok) return;
-
-        const animales = Array.isArray(data) ? data : [];
-        actualizarEstado({ animales });
-
-        const lista = document.getElementById('listaAnimales');
-        if (!lista) return;
-
-        lista.innerHTML = animales.length
-            ? animales.map(a => `
-                <li class="item-lista">
-                    <span>
-                        <i class="fa-solid fa-paw" style="color:#4361ee;margin-right:8px"></i>
-                        <b>${esc(a.nombre_animal)}</b>
-                        <small style="color:#64748b">${esc(a.especie_animal)}${a.edad !== null && a.edad !== undefined ? ` · ${esc(a.edad)} años` : ''}</small>
-                        <span class="badge badge-${esc(String(a.estado).toLowerCase())}">${esc(a.estado)}</span>
-                    </span>
-                    <div class="btn-group">
-                        <button type="button" class="btn-edit" title="Editar animal"
-                                data-accion="editar-animal" data-id="${a.id_animal}">
-                            <i class="fa-solid fa-pen"></i>
-                        </button>
-                        <button type="button" class="btn-del" title="Eliminar"
-                                data-accion="eliminar" data-entidad="animales" data-id="${a.id_animal}">
-                            <i class="fa-solid fa-trash-can"></i>
-                        </button>
-                    </div>
-                </li>`).join('')
-            : '<li class="empty-state"><i class="fa-solid fa-inbox"></i> Sin registros</li>';
-    } catch (e) {
-        console.error('[cargarAnimales]', e.message);
-    }
-}
 
 // ==========================================
 // ACCIONES DELEGADAS (editar / eliminar)
@@ -571,61 +574,61 @@ document.addEventListener('click', async e => {
 async function editarNombre(entidad, id, nombreActual) {
     const etiquetas = { animales: 'animal', protectoras: 'protectora' };
 
-    const { value: nuevoNombre } = await Swal.fire({
-        title: 'Editar ' + (etiquetas[entidad] ?? entidad),
-        input: 'text', inputLabel: 'Nuevo nombre', inputValue: nombreActual,
-        showCancelButton: true, cancelButtonText: 'Cancelar',
-        confirmButtonText: 'Guardar cambios', confirmButtonColor: '#4361ee',
-        inputValidator: v => !v.trim() ? 'El nombre no puede estar vacío' : null,
+    const nuevoNombre = await pedirTexto({
+        titulo: 'Editar ' + (etiquetas[entidad] ?? entidad),
+        etiqueta: 'Nuevo nombre',
+        valor: nombreActual ?? '',
     });
 
-    if (!nuevoNombre || nuevoNombre.trim() === nombreActual) return;
+    if (!nuevoNombre || nuevoNombre === nombreActual) return;
 
     try {
         const { ok, data } = await peticion(`/api/${entidad}?id=${encodeURIComponent(id)}`, {
             method: 'PATCH',
-            body: JSON.stringify({ nombre: nuevoNombre.trim() }),
+            body: JSON.stringify({ nombre: nuevoNombre }),
         });
 
-        if (!ok) return Swal.fire('Error', data?.error || 'No se pudo actualizar', 'error');
+        if (!ok) return toast(data?.error || 'No se pudo actualizar', 'error');
 
         await recargarEntidad(entidad);
-        toast('¡Actualizado!');
+        toast('Actualizado');
     } catch (e) {
-        Swal.fire('Error de red', e.message, 'error');
+        toast('Error de red: ' + e.message, 'error');
     }
 }
 
 async function eliminar(entidad, id) {
-    const confirmado = await Swal.fire({
-        title: '¿Eliminar registro?', text: 'Esta acción no se puede deshacer', icon: 'warning',
-        showCancelButton: true, confirmButtonColor: '#ef233c', cancelButtonColor: '#64748b',
-        cancelButtonText: 'Cancelar', confirmButtonText: 'Sí, eliminar',
+    const confirmado = await confirmar({
+        titulo: '¿Eliminar registro?',
+        mensaje: 'Esta acción no se puede deshacer.',
+        confirmar: 'Eliminar',
+        peligroso: true,
     });
-
-    if (!confirmado.isConfirmed) return;
+    if (!confirmado) return;
 
     try {
         const { ok, data } = await peticion(`/api/${entidad}?id=${encodeURIComponent(id)}`, { method: 'DELETE' });
-        if (!ok) return Swal.fire('Error', data?.error || 'No se pudo eliminar el registro', 'error');
+        if (!ok) return toast(data?.error || 'No se pudo eliminar el registro', 'error');
 
         await recargarEntidad(entidad);
         toast('Eliminado');
     } catch (e) {
-        Swal.fire('Error', 'No se pudo eliminar el registro', 'error');
+        toast('No se pudo eliminar el registro', 'error');
     }
 }
 
 /** Recarga solo lo afectado: evita refrescar listas que no han cambiado. */
 async function recargarEntidad(entidad) {
     if (entidad === 'usuarios') return cargarUsuarios();
+
     if (entidad === 'animales') {
         await Promise.all([
             tienePermiso('animales:gestionar') ? cargarAnimales() : Promise.resolve(),
-            tienePermiso('animales:consultar') ? cargarCatalogo() : Promise.resolve(),
+            cargarCatalogo(),
         ]);
         return;
     }
+
     if (entidad === 'protectoras') {
         // Una protectora afecta además a los desplegables y a la columna de la tabla.
         await cargarProtectoras();
@@ -634,69 +637,38 @@ async function recargarEntidad(entidad) {
 }
 
 // ==========================================
-// FORMULARIOS DE ALTA (protectoras y animales)
+// ALTA DE PROTECTORA
 // ==========================================
-const ALTAS = {
-    formProtectora: {
-        url: '/api/protectoras',
-        entidad: 'protectoras',
-        cuerpo: () => ({
-            nombre:    document.getElementById('p_nombre').value,
-            ubicacion: document.getElementById('p_ubicacion').value,
-        }),
-    },
-    animalForm: {
-        url: '/api/animales',
-        entidad: 'animales',
-        cuerpo: () => ({
-            nombre:        document.getElementById('nombre').value,
-            especie:       document.getElementById('especie').value,
-            edad:          document.getElementById('edad').value || null,
-            id_protectora: document.getElementById('selectProtectora').value,
-        }),
-    },
-};
+document.getElementById('formProtectora')?.addEventListener('submit', async e => {
+    e.preventDefault();
 
-Object.entries(ALTAS).forEach(([formId, config]) => {
-    document.getElementById(formId)?.addEventListener('submit', async e => {
-        e.preventDefault();
+    const restaurar = botonCargando(e.target.querySelector('button[type="submit"]'), 'Registrando…');
 
-        const submitBtn = e.target.querySelector('button[type="submit"]');
-        const origText  = submitBtn.innerHTML;
-        submitBtn.disabled = true;
-        submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
+    try {
+        const { ok, data } = await peticion('/api/protectoras', {
+            method: 'POST',
+            body: JSON.stringify({
+                nombre:    document.getElementById('p_nombre').value,
+                ubicacion: document.getElementById('p_ubicacion').value,
+            }),
+        });
 
-        try {
-            const { ok, data } = await peticion(config.url, {
-                method: 'POST',
-                body: JSON.stringify(config.cuerpo()),
-            });
+        if (!ok) return toast(data?.error || 'No se pudo guardar', 'error');
 
-            if (!ok) return Swal.fire('Error', data?.error || 'No se pudo guardar', 'error');
-
-            e.target.reset();
-            await recargarEntidad(config.entidad);
-            toast('¡Guardado!');
-        } catch (err) {
-            Swal.fire('Error de red', err.message, 'error');
-        } finally {
-            submitBtn.disabled = false;
-            submitBtn.innerHTML = origText;
-        }
-    });
+        e.target.reset();
+        await recargarEntidad('protectoras');
+        toast('Protectora registrada');
+    } catch (err) {
+        toast('Error de red: ' + err.message, 'error');
+    } finally {
+        restaurar();
+    }
 });
 
 // ==========================================
 // MIS DATOS (autoservicio de perfil)
 // ==========================================
 const modalPerfil = document.getElementById('modalPerfil');
-
-function errorPerfil(mensaje) {
-    const el = document.getElementById('modalPerfilError');
-    if (!el) return;
-    el.textContent = mensaje ?? '';
-    el.hidden = !mensaje;
-}
 
 document.getElementById('btnMiCuenta')?.addEventListener('click', () => {
     if (!modalPerfil || !estado.sesion) return;
@@ -713,7 +685,7 @@ document.getElementById('btnMiCuenta')?.addEventListener('click', () => {
             (protectora ? ` · ${protectora}` : '');
     }
 
-    errorPerfil(null);
+    mostrarError('modalPerfilError', null);
     modalPerfil.showModal();
     document.getElementById('pf_nombre').focus();
 });
@@ -723,23 +695,20 @@ document.getElementById('btnCancelarModalPerfil')?.addEventListener('click', () 
 
 document.getElementById('formPerfil')?.addEventListener('submit', async e => {
     e.preventDefault();
-    errorPerfil(null);
+    mostrarError('modalPerfilError', null);
 
     const nombre   = document.getElementById('pf_nombre').value.trim();
     const email    = document.getElementById('pf_email').value.trim();
     const password = document.getElementById('pf_password').value;
 
-    if (!nombre || !email) return errorPerfil('Nombre y correo son obligatorios');
+    if (!nombre || !email) return mostrarError('modalPerfilError', 'Nombre y correo son obligatorios');
     if (password && password.length < 8)
-        return errorPerfil('La contraseña debe tener al menos 8 caracteres');
+        return mostrarError('modalPerfilError', 'La contraseña debe tener al menos 8 caracteres');
 
     const cuerpo = { nombre, email };
     if (password) cuerpo.password = password;
 
-    const boton = document.getElementById('btnGuardarPerfil');
-    const textoOriginal = boton.innerHTML;
-    boton.disabled = true;
-    boton.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Guardando...';
+    const restaurar = botonCargando(document.getElementById('btnGuardarPerfil'));
 
     try {
         const { ok, data } = await peticion('/api/perfil', {
@@ -747,7 +716,7 @@ document.getElementById('formPerfil')?.addEventListener('submit', async e => {
             body: JSON.stringify(cuerpo),
         });
 
-        if (!ok) return errorPerfil(data?.error || 'No se pudieron guardar los cambios');
+        if (!ok) return mostrarError('modalPerfilError', data?.error || 'No se pudieron guardar los cambios');
 
         // La sesión guardada se refresca con los datos nuevos, sin tocar rol ni permisos.
         const sesion = { ...estado.sesion, nombre: data.usuario.nombre, email: data.usuario.email };
@@ -756,14 +725,22 @@ document.getElementById('formPerfil')?.addEventListener('submit', async e => {
         aplicarPermisos();
 
         modalPerfil?.close();
-        toast('¡Datos actualizados!');
+        toast('Datos actualizados');
     } catch (err) {
-        errorPerfil('Error de red: ' + err.message);
+        mostrarError('modalPerfilError', 'Error de red: ' + err.message);
     } finally {
-        boton.disabled = false;
-        boton.innerHTML = textoOriginal;
+        restaurar();
     }
 });
 
+// ==========================================
+// CIERRE DE MODALES
+// ==========================================
+
+// Clic en el backdrop: el objetivo del evento es el propio <dialog>.
+document.querySelectorAll('dialog.modal').forEach(dlg => {
+    dlg.addEventListener('click', e => { if (e.target === dlg) dlg.close(); });
+});
+
 // El arranque vive al final de registro-catalogo.js, que se carga después:
-// así todas las funciones del panel están definidas cuando se invoca iniciarPanel().
+// así todas las funciones del catálogo están definidas cuando se invoca iniciarPanel().

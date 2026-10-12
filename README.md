@@ -41,7 +41,7 @@ Navegador (SPA)                Vercel Functions              Neon Postgres
 | Capa | Tecnología | Justificación |
 | :--- | :--- | :--- |
 | **Frontend** | HTML5, CSS3, JavaScript ES6+ | Sin build step ni framework: carga mínima y despliegue directo. |
-| **UI libs** | Font Awesome 6, SweetAlert2 11 (CDN) | Iconografía y diálogos sin dependencias de compilación. |
+| **UI** | Sistema de diseño propio ([`DESIGN_SYSTEM.md`](DESIGN_SYSTEM.md)) | Iconos SVG inline y diálogos propios: sin librerías de UI por CDN. |
 | **Backend** | Node.js ≥18, Vercel Serverless Functions | Escalado automático; un fichero por recurso en `api/`. |
 | **Acceso a datos** | `@vercel/postgres` (plantillas `sql\`\``) | Consultas parametrizadas, sin concatenación de SQL. |
 | **Autenticación** | `bcryptjs` | Verificación de contraseñas con hash. |
@@ -77,10 +77,21 @@ puede tocar la ficha de otra persona.
 
 | Parámetro | Ejemplo | Efecto |
 | :--- | :--- | :--- |
-| `q` | `?q=nal` | Busca en nombre y especie (sin distinguir mayúsculas). |
+| `q` | `?q=nal` | Busca en nombre, especie, raza y provincia (sin distinguir mayúsculas). |
 | `especie` | `?especie=Perro` | Coincidencia exacta de especie, sin distinguir mayúsculas. |
+| `provincia` | `?provincia=Valencia` | Coincidencia exacta de provincia, sin distinguir mayúsculas. |
 | `estado` | `?estado=Adoptado` | Sólo lo aplican los roles con `animales:gestionar`. |
 | `id_protectora` | `?id_protectora=2` | Ignorado para el rol `Protectora`, que siempre ve la suya. |
+
+`GET /api/animales` es **público**: sin cabecera de identidad devuelve el catálogo de
+animales `Disponible`, que es lo que alimenta la portada abierta.
+
+`POST` y `PATCH` aceptan, además de `nombre`, `especie`, `edad`, `estado` e
+`id_protectora`, los campos de la ficha detallada: `sexo`, `tamano`,
+`fecha_nacimiento`, `raza`, `provincia`, `puede_viajar`, `entrega_condiciones`,
+`info_importante`, `compatible` y `fotos`. Se validan en `api/_animal-campos.js`, que
+además consulta `information_schema` para ignorar los campos cuya columna todavía no
+exista: la API sigue funcionando contra una base de datos sin migrar.
 
 `PATCH` y `DELETE` identifican el registro por query string: `/api/animales?id=7`.
 Todos los handlers responden `405` ante métodos no contemplados y `500` con mensaje
@@ -96,7 +107,7 @@ Tres entidades normalizadas (los nombres de columna son los que usan los handler
 | :--- | :--- | :--- |
 | `usuario` | `id_usuario` | `nombre_usuario`, `email`, `password`, `tipo_usuario`, `id_protectora` → `protectora` |
 | `protectora` | `id_protectora` | `nombre_protectora`, `ubicacion` |
-| `animal` | `id_animal` | `nombre_animal`, `especie_animal`, `edad`, `estado`, `id_protectora` → `protectora` |
+| `animal` | `id_animal` | `nombre_animal`, `especie_animal`, `edad`, `estado`, `id_protectora` → `protectora`, más los campos de ficha de la tabla siguiente |
 
 `animal.estado` admite `'Disponible'`, `'Reservado'` y `'Adoptado'`, y se inicializa a
 `'Disponible'` en el alta. La edad debe estar entre 0 y 40 años.
@@ -110,6 +121,41 @@ ALTER TABLE animal
 CREATE INDEX IF NOT EXISTS idx_animal_protectora ON animal (id_protectora);
 CREATE INDEX IF NOT EXISTS idx_animal_estado     ON animal (estado);
 ```
+
+### Ficha detallada del animal
+
+Los cuatro bloques de la ficha pública («Mis datos», «Me entregan», «Tienes que saber
+que» y «Compatible») y la galería se apoyan en estas columnas:
+
+| Columna | Tipo | Bloque | Valores |
+| :--- | :--- | :--- | :--- |
+| `sexo` | `VARCHAR(10)` | Mis datos | `Macho`, `Hembra` o `NULL` |
+| `tamano` | `VARCHAR(10)` | Mis datos | `Pequeño`, `Mediano`, `Grande` o `NULL` |
+| `fecha_nacimiento` | `DATE` | Mis datos | `AAAA-MM-DD`, ni futura ni anterior a 40 años |
+| `raza` | `VARCHAR(80)` | Mis datos | Texto libre; también se busca con `?q=` |
+| `provincia` | `VARCHAR(80)` | Mis datos | Texto libre; filtrable con `?provincia=` |
+| `puede_viajar` | `BOOLEAN` | Mis datos | `true`, `false` o `NULL` |
+| `entrega_condiciones` | `TEXT` | Me entregan | Una condición por línea |
+| `info_importante` | `TEXT` | Tienes que saber que | Carácter, necesidades o historia |
+| `compatible` | `JSONB` | Compatible | `{"perros":"si","gatos":"no","ninos":"desconocido"}` |
+| `fotos` | `JSONB` | Galería | Array de hasta 6 data URL; la primera es la principal |
+
+Aplica la migración antes de usarlos:
+
+```bash
+psql "$POSTGRES_URL" -f db/002-animal-ficha.sql
+```
+
+Es idempotente y añade además las restricciones `CHECK` de cada campo y los índices
+`idx_animal_provincia` e `idx_animal_raza`. Si no se aplica, la API detecta las columnas
+ausentes y simplemente las ignora, sin romper el catálogo existente.
+
+**Fotografías.** Se guardan como data URL dentro de `fotos`, no en un bucket externo.
+Para que eso sea viable, `js/fotos.js` las comprime en el navegador con `<canvas>`
+antes de enviarlas: WebP (o JPEG como alternativa), calidad 0.75, resolución máxima
+1920×1080 y un objetivo de 100 KB por imagen, bajando calidad y, si hace falta,
+resolución hasta alcanzarlo. El backend rechaza cualquier foto de más de 200 KB y
+cualquier lista de más de seis.
 
 ### Roles y migración
 
@@ -316,13 +362,14 @@ La interfaz se adapta al rol del usuario autenticado. `POST /api/login` devuelve
 permisos en la respuesta y el frontend muestra u oculta cada bloque marcado con
 `data-permiso`:
 
-| Bloque | Permiso exigido | Admin | Protectora | Adoptante |
-| :--- | :--- | :---: | :---: | :---: |
-| Gestión de usuarios (tabla + modal) | `usuarios:gestionar` | ✅ | — | — |
-| Gestión de protectoras | `protectoras:gestionar` | ✅ | — | — |
-| Gestión de animales (alta, edición, listado) | `animales:gestionar` | ✅ | ✅ *(solo los suyos)* | — |
-| Catálogo de adopción + Mis favoritos | `animales:consultar` | — | — | ✅ |
-| Botón «Mis datos» | *sesión iniciada* | ✅ | ✅ | ✅ |
+| Bloque | Permiso exigido | Visitante | Admin | Protectora | Adoptante |
+| :--- | :--- | :---: | :---: | :---: | :---: |
+| Catálogo público y ficha del animal | *ninguno* | ✅ | ✅ | ✅ | ✅ |
+| Gestión de usuarios (tabla + modal) | `usuarios:gestionar` | — | ✅ | — | — |
+| Gestión de protectoras | `protectoras:gestionar` | — | ✅ | — | — |
+| Gestión de animales (alta, edición, listado) | `animales:gestionar` | — | ✅ | ✅ *(solo los suyos)* | — |
+| Mis favoritos y solicitud de adopción | *sesión iniciada* | — | ✅ | ✅ | ✅ |
+| Botón «Mis datos» | *sesión iniciada* | — | ✅ | ✅ | ✅ |
 
 > **Regla de ocultación.** `aplicarPermisos()` activa el atributo `hidden` sobre cada
 > bloque `[data-permiso]`. La regla del navegador `[hidden] { display: none }` pierde por
@@ -355,22 +402,48 @@ temporal**: no viaja al servidor ni sobrevive a un cambio de navegador o a un bo
 datos del sitio. Un favorito que deja de estar disponible se contabiliza aparte en lugar
 de desaparecer sin explicación.
 
-**Catálogo de adopción (`Adoptante`).** Rejilla de tarjetas con icono por especie,
-buscador con retardo que consulta `?q=`, filtro de especie servido por `?especie=` y
-filtro de protectora aplicado en cliente. Sólo se muestran los animales `Disponible`:
-un adoptante no puede forzar otro estado por query string.
+**Catálogo público.** La portada es el catálogo y se navega **sin cuenta**: rejilla de
+tarjetas con foto (o icono de especie cuando no la hay), buscador de cabecera con
+retardo que consulta `?q=` sobre nombre, raza y provincia, y filtros de especie,
+provincia y protectora. Sólo se muestran los animales `Disponible`: un visitante no
+puede forzar otro estado por query string. Pulsar una tarjeta abre la ficha detallada.
 
-### Centrado de modales
+Guardar un favorito o pulsar «Solicitar adopción» sin sesión no da error: abre el modal
+de acceso ya situado en la pestaña de registro, y la acción se retoma una vez dentro.
 
-Todos los `<dialog class="modal">` se centran con `position: fixed`, `inset: 0` y
-`margin: auto`, lo que los deja en el centro exacto de la ventana sea cual sea su altura:
+### Ficha detallada del animal
+
+La ficha se organiza siempre en los cuatro bloques que fija
+[`DESIGN_SYSTEM.md`](DESIGN_SYSTEM.md) §5.3, con galería a la izquierda y datos a la
+derecha:
+
+1. **Mis datos** — sexo, tamaño, fecha de nacimiento y edad calculada, raza, provincia
+   y si puede viajar.
+2. **Me entregan** — condiciones sanitarias y de adopción, una por línea.
+3. **Tienes que saber que** — carácter, necesidades especiales o historia.
+4. **Compatible** — convivencia con perros, gatos y niños.
+
+Un bloque sin datos no se renderiza: no hay secciones vacías ni guiones de relleno.
+
+### Sistema de diseño
+
+Toda la interfaz sigue [`DESIGN_SYSTEM.md`](DESIGN_SYSTEM.md), que es normativo: paleta
+(`--bg-main: #FAF9F5`, `--primary: #7A4E23`, `--text-main: #1C1917`…), escala tipográfica
+sobre `Inter`, espaciado en múltiplos de 4 px e iconografía exclusivamente SVG inline
+servida por `js/icons.js`. No quedan dependencias de UI por CDN: Font Awesome y
+SweetAlert2 se han sustituido por el registro de iconos propio y por los diálogos de
+`js/ui.js`.
+
+**Centrado de modales.** Todos los `<dialog class="modal">` se centran con
+`margin: auto; inset: 0` y radio de 12 px, tal como fija la guía:
 
 ```css
 .modal {
-    position: fixed; inset: 0; margin: auto;
-    width: min(460px, 90vw); max-width: 90vw;
-    max-height: min(85vh, 85dvh);
-    overflow: hidden;
+    margin: auto; inset: 0;
+    border: none; border-radius: 12px;
+    max-width: min(560px, calc(100vw - 2rem));
+    max-height: calc(100dvh - 2rem);
+    padding: 0;
 }
 
 /* `display` sólo cuando está abierto: un `display` incondicional anularía la
@@ -378,10 +451,10 @@ Todos los `<dialog class="modal">` se centran con `position: fixed`, `inset: 0` 
 .modal[open] { display: flex; flex-direction: column; }
 ```
 
-El cuerpo (`.modal-body`) es la única zona que crece y scrollea (`flex: 1 1 auto;
-min-height: 0; overflow-y: auto`), con cabecera y pie fijos (`flex-shrink: 0`), de modo
-que los botones Cancelar y Guardar nunca se desbordan. Por debajo de 480 px el modal pasa
-a `90vw`, reduce el padding y reparte los botones del pie a lo ancho.
+El cuerpo (`.modal-body`) es la única zona que scrollea, con cabecera y pie fijos, de
+modo que los botones Cancelar y Guardar nunca se desbordan. Se cierran con `Esc`, con el
+botón de cerrar y con clic en el fondo. Por debajo de 480 px el pie reparte los botones
+a lo ancho.
 
 ## ☁️ Despliegue en Vercel
 
@@ -400,6 +473,8 @@ cada módulo de `api/` se compila como función serverless independiente.
 ```
 adoptaydejatuhuella/
 ├── api/
+│   ├── _animal-campos.js    # Validación de la ficha y detección de columnas (interno)
+│   ├── _animal-campos.js    # Validación de la ficha y detección de columnas (interno)
 │   ├── _auth.js             # Autorización por permisos (módulo interno)
 │   ├── _roles.js            # Catálogo de roles (módulo interno)
 │   ├── roles.js             # GET del catálogo de roles
@@ -408,14 +483,22 @@ adoptaydejatuhuella/
 │   ├── login.js             # Autenticación
 │   ├── protectoras.js       # CRUD de protectoras
 │   └── usuarios.js          # CRUD de usuarios
+├── db/
+│   └── 002-animal-ficha.sql # Migración de la ficha detallada y las fotos
+├── js/
+│   ├── icons.js             # Registro único de iconos SVG inline
+│   ├── ui.js                # Toasts, confirmaciones y diálogos del sistema de diseño
+│   ├── fotos.js             # Compresión con <canvas> y galería de hasta 6 fotos
+│   └── ficha.js             # Los 4 bloques de la ficha detallada del animal
 ├── tools/
 │   ├── dev-server.js        # Servidor local equivalente a `vercel dev`
 │   └── generate-icons.py    # Generador reproducible de iconos PWA
-├── index.html               # SPA: login overlay + dashboard
-├── styles.css               # Estilos base y tokens de diseño
-├── styles-roles.css         # Pestañas de panel y favoritos
+├── DESIGN_SYSTEM.md         # Guía de estilo normativa de la interfaz
+├── index.html               # Portada pública: catálogo, ficha y modales
+├── styles.css               # Tokens y componentes base
+├── styles-roles.css         # Catálogo, ficha, favoritos y galería
 ├── scripts.js               # Núcleo de cliente (sesión, permisos, login, usuarios)
-├── registro-catalogo.js     # Registro público, catálogo y edición de animales
+├── registro-catalogo.js     # Registro público, catálogo, ficha y alta de animales
 ├── manifest.json            # Manifiesto PWA
 ├── favicon.svg / .ico       # Favicons
 ├── icon-192 / 512 / maskable-512.png
@@ -439,7 +522,7 @@ adoptaydejatuhuella/
 - [x] Auto-registro público por roles y catálogo de adopción con buscador y filtros.
 - [x] Segregación estricta de vistas por rol, favoritos y autoservicio de perfil.
 - [ ] Persistir los favoritos en base de datos en lugar de `localStorage`.
-- [ ] Subida de fotografías de los animales.
+- [x] Subida de fotografías de los animales (hasta 6, comprimidas en el navegador).
 - [ ] Pasarela de donaciones (fase futura).
 
 ---

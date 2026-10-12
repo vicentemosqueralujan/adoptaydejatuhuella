@@ -3,15 +3,14 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-    <title>Panel Administrativo — Adopta y Deja tu Huella</title>
-    <meta name="description" content="Panel administrativo de Adopta y Deja tu Huella: gestión CRUD de protectoras, usuarios y animales en adopción.">
+    <title>Adopta y Deja tu Huella — Catálogo de adopción</title>
+    <meta name="description" content="Catálogo abierto de perros y gatos en adopción de protectoras españolas. Busca por nombre, raza o provincia y conoce su ficha completa.">
     <meta name="author" content="Grupo 6 — 2º DAW (IFP)">
-    <meta name="robots" content="noindex, nofollow">
     <meta name="color-scheme" content="light">
 
     <!-- ===== PWA / Mobile ===== -->
     <link rel="manifest" href="/manifest.json">
-    <meta name="theme-color" content="#4361ee">
+    <meta name="theme-color" content="#7A4E23">
     <meta name="application-name" content="Adopta y Deja tu Huella">
     <meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-capable" content="yes">
@@ -27,247 +26,446 @@
     <!-- ===== Open Graph / Twitter ===== -->
     <meta property="og:type" content="website">
     <meta property="og:site_name" content="Adopta y Deja tu Huella">
-    <meta property="og:title" content="Panel Administrativo — Adopta y Deja tu Huella">
-    <meta property="og:description" content="Gestión CRUD de protectoras, usuarios y animales en adopción.">
+    <meta property="og:title" content="Adopta y Deja tu Huella — Catálogo de adopción">
+    <meta property="og:description" content="Perros y gatos en adopción de protectoras españolas. Busca por nombre, raza o provincia.">
     <meta property="og:image" content="/icon-512.png">
     <meta property="og:locale" content="es_ES">
     <meta name="twitter:card" content="summary">
 
-    <!-- ===== Estilos y dependencias ===== -->
-    <link rel="preconnect" href="https://cdnjs.cloudflare.com" crossorigin>
-    <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
+    <!-- ===== Estilos ===== -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link rel="stylesheet" href="styles.css">
     <link rel="stylesheet" href="styles-roles.css">
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
-    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11" defer></script>
 </head>
 <body>
 
-    <!-- ===== LOGIN OVERLAY ===== -->
-    <div id="loginOverlay" class="login-overlay">
-        <div class="login-card">
-            <div class="login-header">
-                <div class="icon-wrap">
-                    <i class="fa-solid fa-paw"></i>
-                </div>
-                <h2>Panel de Control</h2>
-                <p>Introduce tus credenciales de administrador</p>
-            </div>
-            <div class="login-tabs" role="tablist">
-                <button type="button" class="login-tab is-active" id="tabAcceder"
-                        role="tab" aria-selected="true" aria-controls="panelAcceder">Acceder</button>
-                <button type="button" class="login-tab" id="tabRegistro"
-                        role="tab" aria-selected="false" aria-controls="panelRegistro">Crear cuenta</button>
-            </div>
-
-            <div class="login-body" id="panelAcceder" role="tabpanel" aria-labelledby="tabAcceder">
-                <div class="input-group">
-                    <input type="email" id="loginEmail" placeholder="Correo electrónico" aria-label="Correo electrónico" autocomplete="username">
-                </div>
-                <div class="input-group">
-                    <input type="password" id="loginPass" placeholder="Contraseña" aria-label="Contraseña" autocomplete="current-password">
-                    <button type="button" id="togglePass" class="btn-eye" aria-label="Mostrar u ocultar la contraseña" tabindex="-1"><i class="fa-solid fa-eye"></i></button>
-                </div>
-                <button id="btnEntrar" class="btn-login">
-                    Entrar al Panel
-                </button>
-            </div>
-
-            <form class="login-body" id="panelRegistro" role="tabpanel" aria-labelledby="tabRegistro" novalidate hidden>
-                <div class="input-group">
-                    <input type="text" id="regNombre" placeholder="Nombre completo" aria-label="Nombre completo" autocomplete="name" required>
-                </div>
-                <div class="input-group">
-                    <input type="email" id="regEmail" placeholder="Correo electrónico" aria-label="Correo electrónico" autocomplete="email" required>
-                </div>
-                <div class="input-group">
-                    <input type="password" id="regPass" placeholder="Contraseña (mínimo 8 caracteres)" aria-label="Contraseña" autocomplete="new-password" minlength="8" required>
-                </div>
-                <div class="input-group">
-                    <select id="regTipo" aria-label="Tipo de cuenta" required>
-                        <!-- Sólo los roles con auto-registro, cargados desde /api/roles -->
-                    </select>
-                </div>
-                <div class="input-group" id="regCampoProtectora" hidden>
-                    <select id="regProtectora" aria-label="Protectora a la que perteneces">
-                        <option value="">— Selecciona tu protectora —</option>
-                    </select>
-                </div>
-                <p class="login-ayuda" id="regAyuda"></p>
-                <button type="submit" id="btnRegistrar" class="btn-login">
-                    Crear mi cuenta
-                </button>
-            </form>
-        </div>
-    </div>
-
-    <!-- ===== HEADER ===== -->
-    <header>
-        <div class="header-content">
-            <h1>🐾 Adopta y Deja tu Huella</h1>
-            <p>Panel Administrativo</p>
-        </div>
-        <div class="header-actions">
-            <div id="sesionChip" class="sesion-chip" hidden>
-                <span class="sesion-avatar" id="sesionAvatar" aria-hidden="true"></span>
-                <span class="sesion-datos">
-                    <strong id="sesionNombre"></strong>
-                    <span class="badge" id="sesionRol"></span>
+    <!-- ===================================================================
+         CABECERA PÚBLICA
+         El catálogo es navegable sin cuenta: la cabecera ofrece la búsqueda
+         directa y los accesos, no una pantalla de login bloqueante.
+         =================================================================== -->
+    <header class="cabecera">
+        <div class="capa cabecera-fila">
+            <button type="button" class="marca" id="btnInicio" aria-label="Adopta y Deja tu Huella, ir al inicio">
+                <span data-icono="huella" data-icono-tam="28"></span>
+                <span class="marca-texto">
+                    Adopta y Deja tu Huella
+                    <small>Catálogo de adopción</small>
                 </span>
+            </button>
+
+            <div class="buscador">
+                <span data-icono="buscar" data-icono-tam="18"></span>
+                <input type="search" id="buscarCatalogo"
+                       placeholder="Busca por nombre, raza o provincia"
+                       aria-label="Buscar animales por nombre, raza o provincia">
             </div>
-            <button type="button" id="btnMiCuenta" class="btn-logout" title="Mis datos" hidden>
-                <i class="fa-solid fa-user-pen"></i>
-            </button>
-            <button type="button" id="btnLogout" class="btn-logout" title="Cerrar sesión">
-                <i class="fa-solid fa-right-from-bracket"></i>
-            </button>
+
+            <nav class="nav-acciones" aria-label="Accesos">
+                <button type="button" class="btn-texto" id="btnAccesoProtectoras" data-acceso="Protectora">
+                    Acceso Protectoras
+                </button>
+                <button type="button" class="btn-texto" id="btnAccesoAdmin" data-acceso="Admin">
+                    Acceso Admin
+                </button>
+                <button type="button" class="btn-primario btn-compacto" id="btnAcceder">
+                    Iniciar sesión / Registrarse
+                </button>
+
+                <div id="sesionChip" class="sesion-chip" hidden>
+                    <span class="avatar" id="sesionAvatar" aria-hidden="true"></span>
+                    <span class="sesion-datos">
+                        <strong id="sesionNombre"></strong>
+                        <span class="badge" id="sesionRol"></span>
+                    </span>
+                </div>
+                <button type="button" id="btnMiCuenta" class="btn-icono" title="Mis datos"
+                        aria-label="Mis datos" hidden></button>
+                <button type="button" id="btnLogout" class="btn-icono" title="Cerrar sesión"
+                        aria-label="Cerrar sesión" hidden></button>
+            </nav>
         </div>
     </header>
 
-    <!-- ===== DASHBOARD ===== -->
-    <main class="dashboard-grid">
+    <main class="capa contenido">
 
-        <!-- PROTECTORAS -->
-        <section class="card" data-permiso="protectoras:gestionar" hidden>
-            <h2>🏢 Protectoras</h2>
-            <form id="formProtectora" class="admin-form">
-                <input type="text" id="p_nombre" placeholder="Nombre de la protectora" required>
-                <input type="text" id="p_ubicacion" placeholder="Ubicación">
-                <button type="submit" class="btn-add">
-                    <i class="fa-solid fa-plus"></i> Registrar
-                </button>
-            </form>
-            <ul id="listaProtectoras" class="data-list">
-                <li class="empty-state"><i class="fa-solid fa-inbox"></i> Sin registros</li>
-            </ul>
+        <!-- ===== HERO ===== -->
+        <section class="hero" id="hero">
+            <h1>Encuentra a tu futuro compañero</h1>
+            <p>Perros y gatos de protectoras de toda España, con su ficha completa.
+               Navega libremente; sólo necesitas cuenta para guardar favoritos o solicitar una adopción.</p>
         </section>
 
-        <!-- ANIMALES -->
-        <section class="card" data-permiso="animales:gestionar" hidden>
-            <h2>🐕 <span id="tituloAnimales">Animales</span></h2>
-            <form id="animalForm" class="admin-form">
-                <input type="text" id="nombre" placeholder="Nombre del animal" required>
-                <input type="text" id="especie" placeholder="Especie (perro, gato…)" required>
-                <input type="number" id="edad" placeholder="Edad (años)" min="0" max="40">
-                <select id="selectProtectora" required>
-                    <option value="">— Selecciona protectora —</option>
-                </select>
-                <button type="submit" class="btn-add">
-                    <i class="fa-solid fa-paw"></i> Dar de alta
+        <!-- ===================================================================
+             CATÁLOGO PÚBLICO
+             Visible siempre, con o sin sesión. La pestaña de favoritos sólo
+             aparece para quien ha iniciado sesión.
+             =================================================================== -->
+        <section class="panel" id="panelCatalogo" aria-labelledby="panelCatalogoTitulo">
+            <div class="panel-head">
+                <div>
+                    <h2 id="panelCatalogoTitulo">Animales en adopción</h2>
+                    <p class="panel-sub">Filtra por especie, provincia o protectora.</p>
+                </div>
+                <div class="panel-tools" id="herramientasCatalogo">
+                    <select id="filtroEspecie" class="filtro-select" aria-label="Filtrar por especie">
+                        <option value="">Todas las especies</option>
+                    </select>
+                    <select id="filtroProvincia" class="filtro-select" aria-label="Filtrar por provincia">
+                        <option value="">Todas las provincias</option>
+                    </select>
+                    <select id="filtroProtectoraCat" class="filtro-select" aria-label="Filtrar por protectora">
+                        <option value="">Todas las protectoras</option>
+                    </select>
+                </div>
+            </div>
+
+            <div class="panel-tabs" role="tablist">
+                <button type="button" class="panel-tab is-active" id="tabCatalogo"
+                        role="tab" aria-selected="true" aria-controls="vistaCatalogo">
+                    Catálogo
                 </button>
-            </form>
-            <ul id="listaAnimales" class="data-list">
-                <li class="empty-state"><i class="fa-solid fa-inbox"></i> Sin registros</li>
-            </ul>
+                <button type="button" class="panel-tab" id="tabFavoritos"
+                        role="tab" aria-selected="false" aria-controls="vistaFavoritos">
+                    Mis favoritos
+                    <span class="contador-pill" id="contadorFavoritos">0</span>
+                </button>
+            </div>
+
+            <div class="catalogo-cuerpo">
+                <div id="vistaCatalogo" role="tabpanel" aria-labelledby="tabCatalogo">
+                    <p class="catalogo-contador" id="catalogoContador" aria-live="polite"></p>
+                    <div class="catalogo-grid" id="catalogoGrid"></div>
+                </div>
+
+                <div id="vistaFavoritos" role="tabpanel" aria-labelledby="tabFavoritos" hidden>
+                    <p class="catalogo-contador" id="favoritosContador" aria-live="polite"></p>
+                    <div class="catalogo-grid" id="favoritosGrid"></div>
+                </div>
+            </div>
+        </section>
+
+        <!-- ===== GESTIÓN (Admin y Protectora) ===== -->
+        <div class="rejilla-paneles">
+
+            <section class="panel" data-permiso="protectoras:gestionar" hidden
+                     aria-labelledby="panelProtectorasTitulo">
+                <div class="panel-head">
+                    <div>
+                        <h2 id="panelProtectorasTitulo">Protectoras</h2>
+                        <p class="panel-sub">Entidades registradas en la plataforma.</p>
+                    </div>
+                </div>
+                <div class="panel-cuerpo">
+                    <form id="formProtectora" class="formulario-alta">
+                        <label class="campo">
+                            <span>Nombre de la protectora</span>
+                            <input type="text" id="p_nombre" required autocomplete="organization">
+                        </label>
+                        <label class="campo">
+                            <span>Ubicación <small>(opcional)</small></span>
+                            <input type="text" id="p_ubicacion" autocomplete="address-level2">
+                        </label>
+                        <button type="submit" class="btn-primario btn-bloque">Registrar protectora</button>
+                    </form>
+                    <ul id="listaProtectoras" class="lista"></ul>
+                </div>
+            </section>
+
+            <section class="panel" data-permiso="animales:gestionar" hidden
+                     aria-labelledby="panelAnimalesTitulo">
+                <div class="panel-head">
+                    <div>
+                        <h2 id="panelAnimalesTitulo"><span id="tituloAnimales">Animales</span></h2>
+                        <p class="panel-sub">Alta, ficha completa y fotografías.</p>
+                    </div>
+                    <div class="panel-tools">
+                        <button type="button" id="btnNuevoAnimal" class="btn-primario btn-compacto">
+                            Nuevo animal
+                        </button>
+                    </div>
+                </div>
+                <div class="panel-cuerpo">
+                    <ul id="listaAnimales" class="lista"></ul>
+                </div>
+            </section>
+
+        </div>
+
+        <!-- ===== USUARIOS (solo Admin) ===== -->
+        <section class="panel" id="panelUsuarios" data-permiso="usuarios:gestionar" hidden
+                 aria-labelledby="panelUsuariosTitulo">
+            <div class="panel-head">
+                <div>
+                    <h2 id="panelUsuariosTitulo">Gestión de usuarios</h2>
+                    <p class="panel-sub">Alta, edición de rol y asignación de protectora.</p>
+                </div>
+                <div class="panel-tools">
+                    <div class="buscador">
+                        <span data-icono="buscar" data-icono-tam="18"></span>
+                        <input type="search" id="buscarUsuario" placeholder="Buscar por nombre, email o rol"
+                               aria-label="Buscar usuarios">
+                    </div>
+                    <button type="button" id="btnNuevoUsuario" class="btn-primario btn-compacto">
+                        Nuevo usuario
+                    </button>
+                </div>
+            </div>
+
+            <div class="tabla-wrap">
+                <table class="tabla">
+                    <caption class="sr-only">Listado de usuarios registrados con su rol y protectora asignada</caption>
+                    <thead>
+                        <tr>
+                            <th scope="col">Usuario</th>
+                            <th scope="col">Correo</th>
+                            <th scope="col">Rol</th>
+                            <th scope="col">Protectora</th>
+                            <th scope="col" class="col-acciones">Acciones</th>
+                        </tr>
+                    </thead>
+                    <tbody id="tbodyUsuarios"></tbody>
+                </table>
+            </div>
         </section>
 
     </main>
 
-    <!-- ===== PANEL DE ADMINISTRACIÓN DE USUARIOS (solo rol Admin) ===== -->
-    <section class="admin-panel" id="panelUsuarios" data-permiso="usuarios:gestionar" hidden
-             aria-labelledby="panelUsuariosTitulo">
-        <div class="panel-head">
-            <div>
-                <h2 id="panelUsuariosTitulo"><i class="fa-solid fa-users-gear"></i> Gestión de usuarios</h2>
-                <p class="panel-sub">Alta, edición de rol y asignación de protectora.</p>
-            </div>
-            <div class="panel-tools">
-                <div class="search-wrap">
-                    <i class="fa-solid fa-magnifying-glass" aria-hidden="true"></i>
-                    <input type="search" id="buscarUsuario" placeholder="Buscar por nombre, email o rol"
-                           aria-label="Buscar usuarios">
-                </div>
-                <button type="button" id="btnNuevoUsuario" class="btn-add btn-compact">
-                    <i class="fa-solid fa-user-plus"></i> Nuevo usuario
-                </button>
-            </div>
+    <!-- ===================================================================
+         MODAL DE ACCESO Y REGISTRO
+         Se abre bajo demanda: al pulsar un acceso, o al intentar guardar un
+         favorito o solicitar una adopción sin sesión iniciada.
+         =================================================================== -->
+    <dialog id="modalAcceso" class="modal modal-acceso" aria-labelledby="accesoTitulo">
+        <div class="modal-head">
+            <h3 id="accesoTitulo">Acceder</h3>
+            <button type="button" class="btn-icono" id="btnCerrarAcceso" aria-label="Cerrar"></button>
         </div>
 
-        <div class="tabla-wrap">
-            <table class="tabla-usuarios">
-                <caption class="sr-only">Listado de usuarios registrados con su rol y protectora asignada</caption>
-                <thead>
-                    <tr>
-                        <th scope="col">Usuario</th>
-                        <th scope="col">Correo</th>
-                        <th scope="col">Rol</th>
-                        <th scope="col">Protectora</th>
-                        <th scope="col" class="col-acciones">Acciones</th>
-                    </tr>
-                </thead>
-                <tbody id="tbodyUsuarios">
-                    <tr class="fila-vacia">
-                        <td colspan="5"><i class="fa-solid fa-inbox"></i> Sin registros</td>
-                    </tr>
-                </tbody>
-            </table>
+        <div class="acceso-cabecera">
+            <span data-icono="huella" data-icono-tam="36"></span>
+            <p id="accesoMensaje">Entra con tu cuenta o crea una nueva.</p>
         </div>
-    </section>
 
+        <div class="acceso-tabs" role="tablist">
+            <button type="button" class="panel-tab is-active" id="tabAcceder"
+                    role="tab" aria-selected="true" aria-controls="panelAcceder">Acceder</button>
+            <button type="button" class="panel-tab" id="tabRegistro"
+                    role="tab" aria-selected="false" aria-controls="panelRegistro">Crear cuenta</button>
+        </div>
 
-    <!-- ===== ZONA DEL ADOPTANTE: catálogo y favoritos ===== -->
-    <section class="admin-panel" id="panelCatalogo" data-permiso="animales:consultar" hidden
-             aria-labelledby="panelCatalogoTitulo">
-        <div class="panel-head">
-            <div>
-                <h2 id="panelCatalogoTitulo"><i class="fa-solid fa-heart"></i> Animales en adopción</h2>
-                <p class="panel-sub">Encuentra a tu futuro compañero entre los animales disponibles.</p>
-            </div>
-            <div class="panel-tools" id="herramientasCatalogo">
-                <div class="search-wrap">
-                    <i class="fa-solid fa-magnifying-glass" aria-hidden="true"></i>
-                    <input type="search" id="buscarCatalogo" placeholder="Buscar por nombre o especie"
-                           aria-label="Buscar animales">
-                </div>
-                <select id="filtroEspecie" class="filtro-select" aria-label="Filtrar por especie">
-                    <option value="">Todas las especies</option>
+        <form class="acceso-cuerpo" id="panelAcceder" role="tabpanel" aria-labelledby="tabAcceder" novalidate>
+            <label class="campo">
+                <span>Correo electrónico</span>
+                <input type="email" id="loginEmail" autocomplete="username" required>
+            </label>
+            <label class="campo campo-password">
+                <span>Contraseña</span>
+                <input type="password" id="loginPass" autocomplete="current-password" required>
+                <button type="button" id="togglePass" class="btn-ojo" tabindex="-1"
+                        aria-label="Mostrar u ocultar la contraseña"></button>
+            </label>
+            <p class="campo-error" id="loginError" hidden role="alert"></p>
+            <button type="submit" id="btnEntrar" class="btn-primario btn-bloque">Entrar</button>
+        </form>
+
+        <form class="acceso-cuerpo" id="panelRegistro" role="tabpanel" aria-labelledby="tabRegistro" novalidate hidden>
+            <label class="campo">
+                <span>Nombre completo</span>
+                <input type="text" id="regNombre" autocomplete="name" required>
+            </label>
+            <label class="campo">
+                <span>Correo electrónico</span>
+                <input type="email" id="regEmail" autocomplete="email" required>
+            </label>
+            <label class="campo">
+                <span>Contraseña <small>(mínimo 8 caracteres)</small></span>
+                <input type="password" id="regPass" autocomplete="new-password" minlength="8" required>
+            </label>
+            <label class="campo">
+                <span>Tipo de cuenta</span>
+                <select id="regTipo" required></select>
+            </label>
+            <label class="campo" id="regCampoProtectora" hidden>
+                <span>Protectora a la que perteneces</span>
+                <select id="regProtectora">
+                    <option value="">— Selecciona tu protectora —</option>
                 </select>
-                <select id="filtroProtectoraCat" class="filtro-select" aria-label="Filtrar por protectora">
-                    <option value="">Todas las protectoras</option>
-                </select>
+            </label>
+            <p class="campo-ayuda" id="regAyuda"></p>
+            <p class="campo-error" id="registroError" hidden role="alert"></p>
+            <button type="submit" id="btnRegistrar" class="btn-primario btn-bloque">Crear mi cuenta</button>
+        </form>
+
+        <p class="acceso-pie">El catálogo puede consultarse sin cuenta.</p>
+    </dialog>
+
+    <!-- ===== FICHA DETALLADA DEL ANIMAL ===== -->
+    <dialog id="modalFicha" class="modal modal-ficha" aria-labelledby="fichaTitulo">
+        <div class="modal-head">
+            <h3 id="fichaTitulo">Ficha del animal</h3>
+            <button type="button" class="btn-icono" id="btnCerrarFicha" aria-label="Cerrar"></button>
+        </div>
+        <div class="ficha-cuerpo" id="fichaCuerpo"></div>
+    </dialog>
+
+    <!-- ===== ALTA Y EDICIÓN DE ANIMAL ===== -->
+    <dialog id="modalAnimal" class="modal" aria-labelledby="modalAnimalTitulo">
+        <form id="formAnimal" class="modal-form" novalidate>
+            <div class="modal-head">
+                <h3 id="modalAnimalTitulo">Nuevo animal</h3>
+                <button type="button" class="btn-icono" id="btnCerrarModalAnimal" aria-label="Cerrar"></button>
             </div>
-        </div>
 
-        <div class="panel-tabs" role="tablist">
-            <button type="button" class="panel-tab is-active" id="tabCatalogo"
-                    role="tab" aria-selected="true" aria-controls="vistaCatalogo">
-                <i class="fa-solid fa-paw"></i> Catálogo
-            </button>
-            <button type="button" class="panel-tab" id="tabFavoritos"
-                    role="tab" aria-selected="false" aria-controls="vistaFavoritos">
-                <i class="fa-solid fa-heart"></i> Mis favoritos
-                <span class="contador-pill" id="contadorFavoritos">0</span>
-            </button>
-        </div>
+            <div class="modal-body">
+                <input type="hidden" id="a_id">
 
-        <div class="catalogo-wrap">
-            <div id="vistaCatalogo" role="tabpanel" aria-labelledby="tabCatalogo">
-                <p class="catalogo-contador" id="catalogoContador" aria-live="polite"></p>
-                <div class="catalogo-grid" id="catalogoGrid">
-                    <p class="catalogo-vacio"><i class="fa-solid fa-paw"></i> Cargando animales…</p>
+                <div class="campo-fila">
+                    <label class="campo">
+                        <span>Nombre</span>
+                        <input type="text" id="a_nombre" required>
+                    </label>
+                    <label class="campo">
+                        <span>Especie</span>
+                        <input type="text" id="a_especie" list="especiesSugeridas" required>
+                        <datalist id="especiesSugeridas">
+                            <option value="Perro"></option>
+                            <option value="Gato"></option>
+                        </datalist>
+                    </label>
                 </div>
-            </div>
 
-            <div id="vistaFavoritos" role="tabpanel" aria-labelledby="tabFavoritos" hidden>
-                <p class="catalogo-contador" id="favoritosContador" aria-live="polite"></p>
-                <div class="catalogo-grid" id="favoritosGrid">
-                    <p class="catalogo-vacio">
-                        <i class="fa-regular fa-heart"></i>
-                        Todavía no has guardado ningún animal.
-                    </p>
+                <label class="campo" id="campoProtectoraAnimal">
+                    <span>Protectora</span>
+                    <select id="a_protectora">
+                        <option value="">— Selecciona protectora —</option>
+                    </select>
+                </label>
+
+                <!-- Bloque 1 de la ficha: «Mis datos» -->
+                <fieldset>
+                    <legend>Mis datos</legend>
+                    <div class="campo-fila">
+                        <label class="campo">
+                            <span>Sexo</span>
+                            <select id="a_sexo">
+                                <option value="">Sin especificar</option>
+                                <option value="Macho">Macho</option>
+                                <option value="Hembra">Hembra</option>
+                            </select>
+                        </label>
+                        <label class="campo">
+                            <span>Tamaño</span>
+                            <select id="a_tamano">
+                                <option value="">Sin especificar</option>
+                                <option value="Pequeño">Pequeño</option>
+                                <option value="Mediano">Mediano</option>
+                                <option value="Grande">Grande</option>
+                            </select>
+                        </label>
+                    </div>
+                    <div class="campo-fila">
+                        <label class="campo">
+                            <span>Fecha de nacimiento</span>
+                            <input type="date" id="a_fechaNacimiento">
+                        </label>
+                        <label class="campo">
+                            <span>Edad <small>(años, si no hay fecha)</small></span>
+                            <input type="number" id="a_edad" min="0" max="40">
+                        </label>
+                    </div>
+                    <div class="campo-fila">
+                        <label class="campo">
+                            <span>Raza</span>
+                            <input type="text" id="a_raza" maxlength="80">
+                        </label>
+                        <label class="campo">
+                            <span>Provincia</span>
+                            <input type="text" id="a_provincia" maxlength="80" autocomplete="address-level1">
+                        </label>
+                    </div>
+                    <label class="campo-check">
+                        <input type="checkbox" id="a_puedeViajar">
+                        <span>Puede viajar a otra provincia</span>
+                    </label>
+                </fieldset>
+
+                <label class="campo">
+                    <span>Estado</span>
+                    <select id="a_estado">
+                        <option value="Disponible">Disponible</option>
+                        <option value="Reservado">Reservado</option>
+                        <option value="Adoptado">Adoptado</option>
+                    </select>
+                </label>
+
+                <!-- Bloque 2: «Me entregan» -->
+                <label class="campo">
+                    <span>Me entregan <small>(condiciones sanitarias y de adopción, una por línea)</small></span>
+                    <textarea id="a_entrega" maxlength="2000"
+                              placeholder="Vacunado y desparasitado&#10;Microchip y pasaporte&#10;Esterilizado"></textarea>
+                </label>
+
+                <!-- Bloque 3: «Tienes que saber que» -->
+                <label class="campo">
+                    <span>Tienes que saber que <small>(carácter, necesidades o historia)</small></span>
+                    <textarea id="a_info" maxlength="2000"
+                              placeholder="Es tímido al principio, pero muy cariñoso cuando coge confianza."></textarea>
+                </label>
+
+                <!-- Bloque 4: «Compatible» -->
+                <fieldset>
+                    <legend>Compatible con</legend>
+                    <div class="campo-fila">
+                        <label class="campo">
+                            <span>Perros</span>
+                            <select id="a_compPerros">
+                                <option value="desconocido">Sin determinar</option>
+                                <option value="si">Sí</option>
+                                <option value="no">No</option>
+                            </select>
+                        </label>
+                        <label class="campo">
+                            <span>Gatos</span>
+                            <select id="a_compGatos">
+                                <option value="desconocido">Sin determinar</option>
+                                <option value="si">Sí</option>
+                                <option value="no">No</option>
+                            </select>
+                        </label>
+                    </div>
+                    <label class="campo">
+                        <span>Niños</span>
+                        <select id="a_compNinos">
+                            <option value="desconocido">Sin determinar</option>
+                            <option value="si">Sí</option>
+                            <option value="no">No</option>
+                        </select>
+                    </label>
+                </fieldset>
+
+                <div class="campo">
+                    <span>Fotografías <small>(hasta 6; se comprimen en el navegador)</small></span>
+                    <div id="galeriaAnimal"></div>
                 </div>
-            </div>
-        </div>
-    </section>
 
-    <!-- ===== MODAL DE ALTA / EDICIÓN DE USUARIO ===== -->
+                <p class="modal-error" id="modalAnimalError" hidden role="alert"></p>
+            </div>
+
+            <div class="modal-foot">
+                <button type="button" class="btn-secundario" id="btnCancelarModalAnimal">Cancelar</button>
+                <button type="submit" class="btn-primario" id="btnGuardarAnimal">Guardar</button>
+            </div>
+        </form>
+    </dialog>
+
+    <!-- ===== ALTA / EDICIÓN DE USUARIO ===== -->
     <dialog id="modalUsuario" class="modal" aria-labelledby="modalUsuarioTitulo">
-        <form id="formUsuario" method="dialog" class="modal-form" novalidate>
+        <form id="formUsuario" class="modal-form" novalidate>
             <div class="modal-head">
                 <h3 id="modalUsuarioTitulo">Nuevo usuario</h3>
-                <button type="button" class="btn-cerrar" id="btnCerrarModal" aria-label="Cerrar">
-                    <i class="fa-solid fa-xmark"></i>
-                </button>
+                <button type="button" class="btn-icono" id="btnCerrarModal" aria-label="Cerrar"></button>
             </div>
 
             <div class="modal-body">
@@ -290,9 +488,7 @@
 
                 <label class="campo">
                     <span>Rol</span>
-                    <select id="u_tipo" required>
-                        <!-- Opciones cargadas desde /api/roles -->
-                    </select>
+                    <select id="u_tipo" required></select>
                     <small class="campo-ayuda" id="u_rolDesc"></small>
                 </label>
 
@@ -308,72 +504,17 @@
 
             <div class="modal-foot">
                 <button type="button" class="btn-secundario" id="btnCancelarModal">Cancelar</button>
-                <button type="submit" class="btn-add btn-compact" id="btnGuardarUsuario">
-                    <i class="fa-solid fa-floppy-disk"></i> Guardar
-                </button>
+                <button type="submit" class="btn-primario" id="btnGuardarUsuario">Guardar</button>
             </div>
         </form>
     </dialog>
 
-
-    <!-- ===== MODAL DE EDICIÓN DE ANIMAL ===== -->
-    <dialog id="modalAnimal" class="modal" aria-labelledby="modalAnimalTitulo">
-        <form id="formAnimalEditar" method="dialog" class="modal-form" novalidate>
-            <div class="modal-head">
-                <h3 id="modalAnimalTitulo">Editar animal</h3>
-                <button type="button" class="btn-cerrar" id="btnCerrarModalAnimal" aria-label="Cerrar">
-                    <i class="fa-solid fa-xmark"></i>
-                </button>
-            </div>
-
-            <div class="modal-body">
-                <input type="hidden" id="a_id">
-
-                <label class="campo">
-                    <span>Nombre</span>
-                    <input type="text" id="a_nombre" required>
-                </label>
-
-                <label class="campo">
-                    <span>Especie</span>
-                    <input type="text" id="a_especie" required>
-                </label>
-
-                <label class="campo">
-                    <span>Edad <small>(años)</small></span>
-                    <input type="number" id="a_edad" min="0" max="40">
-                </label>
-
-                <label class="campo">
-                    <span>Estado</span>
-                    <select id="a_estado">
-                        <option value="Disponible">Disponible</option>
-                        <option value="Reservado">Reservado</option>
-                        <option value="Adoptado">Adoptado</option>
-                    </select>
-                </label>
-
-                <p class="modal-error" id="modalAnimalError" hidden role="alert"></p>
-            </div>
-
-            <div class="modal-foot">
-                <button type="button" class="btn-secundario" id="btnCancelarModalAnimal">Cancelar</button>
-                <button type="submit" class="btn-add btn-compact" id="btnGuardarAnimal">
-                    <i class="fa-solid fa-floppy-disk"></i> Guardar
-                </button>
-            </div>
-        </form>
-    </dialog>
-
-
-    <!-- ===== MODAL MIS DATOS ===== -->
+    <!-- ===== MIS DATOS ===== -->
     <dialog id="modalPerfil" class="modal" aria-labelledby="modalPerfilTitulo">
-        <form id="formPerfil" method="dialog" class="modal-form" novalidate>
+        <form id="formPerfil" class="modal-form" novalidate>
             <div class="modal-head">
                 <h3 id="modalPerfilTitulo">Mis datos</h3>
-                <button type="button" class="btn-cerrar" id="btnCerrarModalPerfil" aria-label="Cerrar">
-                    <i class="fa-solid fa-xmark"></i>
-                </button>
+                <button type="button" class="btn-icono" id="btnCerrarModalPerfil" aria-label="Cerrar"></button>
             </div>
 
             <div class="modal-body">
@@ -398,13 +539,16 @@
 
             <div class="modal-foot">
                 <button type="button" class="btn-secundario" id="btnCancelarModalPerfil">Cancelar</button>
-                <button type="submit" class="btn-add btn-compact" id="btnGuardarPerfil">
-                    <i class="fa-solid fa-floppy-disk"></i> Guardar
-                </button>
+                <button type="submit" class="btn-primario" id="btnGuardarPerfil">Guardar</button>
             </div>
         </form>
     </dialog>
 
+    <!-- El orden importa: icons y ui definen las utilidades que usan el resto. -->
+    <script src="js/icons.js" defer></script>
+    <script src="js/ui.js" defer></script>
+    <script src="js/fotos.js" defer></script>
+    <script src="js/ficha.js" defer></script>
     <script src="scripts.js" defer></script>
     <script src="registro-catalogo.js" defer></script>
 </body>

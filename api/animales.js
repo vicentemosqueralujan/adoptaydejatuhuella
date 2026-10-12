@@ -1,6 +1,12 @@
 const { sql } = require('@vercel/postgres');
 const { identificarSolicitante, puede } = require('./_auth.js');
 const { ROLES } = require('./_roles.js');
+const {
+    CampoInvalido,
+    columnasDisponibles,
+    columnasSelect,
+    normalizarFicha,
+} = require('./_animal-campos.js');
 
 const PERMISO_GESTION   = 'animales:gestionar';
 const ESTADO_DISPONIBLE = 'Disponible';
@@ -36,6 +42,138 @@ function protectoraDelSolicitante(solicitante) {
     return solicitante?.tipo_usuario === ROLES.PROTECTORA ? (solicitante.id_protectora ?? null) : null;
 }
 
+/**
+ * Columnas del SELECT, cualificadas con el alias de `animal`.
+ * La lista sale de `information_schema`, nunca de datos del cliente.
+ */
+function proyeccion(columnas) {
+    return columnasSelect(columnas).map(c => `a.${c}`).join(', ');
+}
+
+/** Búsqueda libre: nombre, especie, raza y provincia, según lo que exista. */
+function condicionBusqueda(columnas, posicion) {
+    const campos = ['a.nombre_animal', 'a.especie_animal'];
+    if (columnas.has('raza'))      campos.push('a.raza');
+    if (columnas.has('provincia')) campos.push('a.provincia');
+    return `(${campos.map(c => `${c} ILIKE '%' || $${posicion}::text || '%'`).join(' OR ')})`;
+}
+
+async function listar(req, columnas, { esGestor, protectoraPropia }) {
+    const q         = parsearTexto(req.query?.q);
+    const especie   = parsearTexto(req.query?.especie);
+    const provincia = parsearTexto(req.query?.provincia);
+
+    // Quien no gestiona animales sólo ve el catálogo de adopción: los
+    // disponibles. Una protectora ve exclusivamente los suyos, en cualquier
+    // estado. Un Admin puede filtrar libremente.
+    const estadoPedido = parsearTexto(req.query?.estado);
+    const estado = esGestor
+        ? (ESTADOS_VALIDOS.includes(estadoPedido) ? estadoPedido : null)
+        : ESTADO_DISPONIBLE;
+
+    const idProtectora = protectoraPropia ?? parsearId(req.query?.id_protectora);
+
+    const condiciones = [];
+    const valores = [];
+    const marcador = valor => { valores.push(valor); return valores.length; };
+
+    if (idProtectora !== null) condiciones.push(`a.id_protectora = $${marcador(idProtectora)}::int`);
+    if (estado !== null)       condiciones.push(`a.estado = $${marcador(estado)}::text`);
+    if (especie !== null)      condiciones.push(`LOWER(a.especie_animal) = LOWER($${marcador(especie)}::text)`);
+
+    if (provincia !== null && columnas.has('provincia'))
+        condiciones.push(`LOWER(a.provincia) = LOWER($${marcador(provincia)}::text)`);
+
+    if (q !== null) condiciones.push(condicionBusqueda(columnas, marcador(q)));
+
+    const where = condiciones.length ? `WHERE ${condiciones.join(' AND ')}` : '';
+
+    const { rows } = await sql.query(`
+        SELECT ${proyeccion(columnas)}, p.nombre_protectora
+        FROM animal a
+        LEFT JOIN protectora p ON p.id_protectora = a.id_protectora
+        ${where}
+        ORDER BY a.id_animal DESC
+    `, valores);
+
+    return rows;
+}
+
+async function crear(req, columnas, { protectoraPropia }) {
+    const { nombre, especie, edad, id_protectora } = req.body ?? {};
+
+    if (!nombre?.trim() || !especie?.trim())
+        return { estado: 400, cuerpo: { error: 'Nombre y especie son obligatorios' } };
+
+    const edadNormalizada = parsearEdad(edad);
+    if (edadNormalizada === undefined)
+        return { estado: 400, cuerpo: { error: `La edad debe ser un número entre 0 y ${EDAD_MAXIMA}` } };
+
+    // Una protectora sólo da de alta en la suya, venga lo que venga en el cuerpo.
+    const destino = protectoraPropia ?? parsearId(id_protectora);
+    if (!destino)
+        return { estado: 400, cuerpo: { error: 'Debes indicar la protectora del animal' } };
+
+    const ficha = normalizarFicha(req.body, columnas);
+
+    const nombresColumnas = ['nombre_animal', 'especie_animal', 'edad', 'estado', 'id_protectora',
+                             ...ficha.map(f => f.columna)];
+    const valores = [nombre.trim(), especie.trim(), edadNormalizada, ESTADO_DISPONIBLE, destino,
+                     ...ficha.map(f => f.valor)];
+    const marcadores = valores.map((_, i) => `$${i + 1}`);
+
+    const { rows } = await sql.query(`
+        INSERT INTO animal (${nombresColumnas.join(', ')})
+        VALUES (${marcadores.join(', ')})
+        RETURNING ${columnasSelect(columnas).join(', ')}
+    `, valores);
+
+    return { estado: 201, cuerpo: { ok: true, animal: rows[0] ?? null } };
+}
+
+async function actualizar(req, columnas, id) {
+    const { nombre, especie, edad, estado } = req.body ?? {};
+    const ficha = normalizarFicha(req.body, columnas);
+
+    if ([nombre, especie, edad, estado].every(v => v === undefined) && !ficha.length)
+        return { estado: 400, cuerpo: { error: 'No se ha indicado ningún campo que actualizar' } };
+
+    if (nombre !== undefined && !String(nombre).trim())
+        return { estado: 400, cuerpo: { error: 'El nombre no puede estar vacío' } };
+
+    if (especie !== undefined && !String(especie).trim())
+        return { estado: 400, cuerpo: { error: 'La especie no puede estar vacía' } };
+
+    if (estado !== undefined && !ESTADOS_VALIDOS.includes(estado))
+        return { estado: 400, cuerpo: { error: `Estado no válido. Valores permitidos: ${ESTADOS_VALIDOS.join(', ')}` } };
+
+    if (edad !== undefined && parsearEdad(edad) === undefined)
+        return { estado: 400, cuerpo: { error: `La edad debe ser un número entre 0 y ${EDAD_MAXIMA}` } };
+
+    // Sólo se tocan las columnas realmente enviadas: el resto queda intacto.
+    const asignaciones = [];
+    const valores = [];
+    const asignar = (columna, valor) => {
+        valores.push(valor);
+        asignaciones.push(`${columna} = $${valores.length}`);
+    };
+
+    if (nombre  !== undefined) asignar('nombre_animal',  String(nombre).trim());
+    if (especie !== undefined) asignar('especie_animal', String(especie).trim());
+    if (estado  !== undefined) asignar('estado', estado);
+    if (edad    !== undefined) asignar('edad', parsearEdad(edad));
+    ficha.forEach(f => asignar(f.columna, f.valor));
+
+    valores.push(id);
+
+    await sql.query(
+        `UPDATE animal SET ${asignaciones.join(', ')} WHERE id_animal = $${valores.length}`,
+        valores,
+    );
+
+    return { estado: 200, cuerpo: { ok: true } };
+}
+
 module.exports = async function handler(req, res) {
     res.setHeader('Access-Control-Allow-Origin', '*');
     res.setHeader('Access-Control-Allow-Methods', 'GET, POST, DELETE, PATCH, OPTIONS');
@@ -50,41 +188,13 @@ module.exports = async function handler(req, res) {
         const esGestor = puede(solicitante, PERMISO_GESTION);
         const protectoraPropia = protectoraDelSolicitante(solicitante);
 
+        // La ficha detallada depende de `db/002-animal-ficha.sql`. Si la migración
+        // no está aplicada, los campos nuevos se ignoran en lugar de romper.
+        const columnas = await columnasDisponibles(sql);
+
         if (method === 'GET') {
-            const q       = parsearTexto(req.query?.q);
-            const especie = parsearTexto(req.query?.especie);
-
-            // Quien no gestiona animales sólo ve el catálogo de adopción: los
-            // disponibles. Una protectora ve exclusivamente los suyos, en cualquier
-            // estado. Un Admin puede filtrar libremente.
-            const estadoPedido = parsearTexto(req.query?.estado);
-            const estado = esGestor
-                ? (ESTADOS_VALIDOS.includes(estadoPedido) ? estadoPedido : null)
-                : ESTADO_DISPONIBLE;
-
-            const idProtectora = protectoraPropia ?? parsearId(req.query?.id_protectora);
-
-            // Filtros opcionales resueltos en una sola consulta parametrizada:
-            // cada condición se desactiva sola cuando su parámetro es NULL.
-            const { rows } = await sql`
-                SELECT a.id_animal,
-                       a.nombre_animal,
-                       a.especie_animal,
-                       a.edad,
-                       a.estado,
-                       a.id_protectora,
-                       p.nombre_protectora
-                FROM animal a
-                LEFT JOIN protectora p ON p.id_protectora = a.id_protectora
-                WHERE (${idProtectora}::int IS NULL OR a.id_protectora = ${idProtectora}::int)
-                  AND (${estado}::text IS NULL OR a.estado = ${estado}::text)
-                  AND (${especie}::text IS NULL OR LOWER(a.especie_animal) = LOWER(${especie}::text))
-                  AND (${q}::text IS NULL
-                       OR a.nombre_animal ILIKE '%' || ${q}::text || '%'
-                       OR a.especie_animal ILIKE '%' || ${q}::text || '%')
-                ORDER BY a.id_animal DESC
-            `;
-            return res.status(200).json(rows);
+            const filas = await listar(req, columnas, { esGestor, protectoraPropia });
+            return res.status(200).json(filas);
         }
 
         // A partir de aquí todo modifica el catálogo.
@@ -93,26 +203,8 @@ module.exports = async function handler(req, res) {
                       .json({ error: 'Se requieren permisos de gestión de animales' });
 
         if (method === 'POST') {
-            const { nombre, especie, edad, id_protectora } = req.body ?? {};
-
-            if (!nombre?.trim() || !especie?.trim())
-                return res.status(400).json({ error: 'Nombre y especie son obligatorios' });
-
-            const edadNormalizada = parsearEdad(edad);
-            if (edadNormalizada === undefined)
-                return res.status(400).json({ error: `La edad debe ser un número entre 0 y ${EDAD_MAXIMA}` });
-
-            // Una protectora sólo da de alta en la suya, venga lo que venga en el cuerpo.
-            const destino = protectoraPropia ?? parsearId(id_protectora);
-            if (!destino)
-                return res.status(400).json({ error: 'Debes indicar la protectora del animal' });
-
-            const { rows } = await sql`
-                INSERT INTO animal (nombre_animal, especie_animal, edad, estado, id_protectora)
-                VALUES (${nombre.trim()}, ${especie.trim()}, ${edadNormalizada}, ${ESTADO_DISPONIBLE}, ${destino})
-                RETURNING id_animal, nombre_animal, especie_animal, edad, estado, id_protectora
-            `;
-            return res.status(201).json({ ok: true, animal: rows[0] ?? null });
+            const { estado, cuerpo } = await crear(req, columnas, { protectoraPropia });
+            return res.status(estado).json(cuerpo);
         }
 
         if (!id) return res.status(400).json({ error: 'Identificador de animal no válido' });
@@ -133,43 +225,15 @@ module.exports = async function handler(req, res) {
         }
 
         if (method === 'PATCH') {
-            const { nombre, especie, edad, estado } = req.body ?? {};
-
-            if ([nombre, especie, edad, estado].every(v => v === undefined))
-                return res.status(400).json({ error: 'No se ha indicado ningún campo que actualizar' });
-
-            if (nombre !== undefined && !String(nombre).trim())
-                return res.status(400).json({ error: 'El nombre no puede estar vacío' });
-
-            if (especie !== undefined && !String(especie).trim())
-                return res.status(400).json({ error: 'La especie no puede estar vacía' });
-
-            if (estado !== undefined && !ESTADOS_VALIDOS.includes(estado))
-                return res.status(400).json({ error: `Estado no válido. Valores permitidos: ${ESTADOS_VALIDOS.join(', ')}` });
-
-            const edadNormalizada = edad !== undefined ? parsearEdad(edad) : null;
-            if (edadNormalizada === undefined)
-                return res.status(400).json({ error: `La edad debe ser un número entre 0 y ${EDAD_MAXIMA}` });
-
-            const nombreNuevo  = nombre  !== undefined ? String(nombre).trim()  : null;
-            const especieNueva = especie !== undefined ? String(especie).trim() : null;
-            const estadoNuevo  = estado  !== undefined ? estado : null;
-            const tocaEdad     = edad !== undefined;
-
-            // COALESCE deja intacto cualquier campo no enviado, en una sola consulta.
-            await sql`
-                UPDATE animal SET
-                    nombre_animal  = COALESCE(${nombreNuevo}, nombre_animal),
-                    especie_animal = COALESCE(${especieNueva}, especie_animal),
-                    estado         = COALESCE(${estadoNuevo}, estado),
-                    edad           = CASE WHEN ${tocaEdad} THEN ${edadNormalizada} ELSE edad END
-                WHERE id_animal = ${id}
-            `;
-            return res.status(200).json({ ok: true });
+            const { estado, cuerpo } = await actualizar(req, columnas, id);
+            return res.status(estado).json(cuerpo);
         }
 
         return res.status(405).json({ error: 'Método no permitido' });
     } catch (e) {
+        // Validación de la ficha: es culpa del cliente, no del servidor.
+        if (e instanceof CampoInvalido) return res.status(400).json({ error: e.message });
+
         console.error('[ANIMALES ERROR]', e.message);
         // 23503 = violación de clave ajena (protectora inexistente).
         if (e.code === '23503')

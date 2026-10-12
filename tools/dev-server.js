@@ -15,7 +15,9 @@ const path = require('path');
 const ROOT = path.resolve(__dirname, '..');
 const API_DIR = path.join(ROOT, 'api');
 const PORT = Number(process.argv[2] || process.env.PORT || 3000);
-const MAX_BODY_BYTES = 1_000_000;
+// Un alta de animal puede llevar 6 fotos comprimidas en base64 (~800 KB) más
+// el resto de la ficha. 8 MB deja margen y sigue por debajo del límite de Vercel.
+const MAX_BODY_BYTES = 8_000_000;
 
 const MIME_TYPES = {
     '.html': 'text/html; charset=utf-8',
@@ -114,7 +116,16 @@ function servirEstatico(req, res, rutaUrl) {
 }
 
 const server = http.createServer((req, res) => {
-    const url = new URL(req.url, `http://${req.headers.host || 'localhost'}`);
+    // Una ruta malformada (por ejemplo `//`) hacía caer el proceso entero:
+    // se responde 400 y el servidor sigue en pie.
+    let url;
+    try {
+        url = new URL(req.url, `http://${req.headers.host || 'localhost'}`);
+    } catch {
+        res.writeHead(400, { 'Content-Type': MIME_TYPES['.txt'] });
+        return res.end('400 Bad Request');
+    }
+
     req.query = Object.fromEntries(url.searchParams);
 
     const apiMatch = url.pathname.match(/^\/api\/([a-z0-9_-]+)\/?$/i);

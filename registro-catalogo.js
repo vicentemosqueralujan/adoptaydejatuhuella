@@ -1,20 +1,22 @@
 // ==========================================================================
-// Registro público, catálogo de adopción y edición de animales.
+// Registro público, catálogo abierto, ficha detallada del animal y
+// alta/edición con galería de fotografías.
 //
 // Se carga después de scripts.js y comparte su ámbito global: usa `estado`,
-// `esc`, `peticion`, `tienePermiso`, `toast` e `iniciarPanel` de ese fichero.
+// `peticion`, `tienePermiso`, `abrirAcceso`, `recargarEntidad` e `iniciarPanel`,
+// además de `icono()`, `esc()`, `toast()`, `botonCargando()` y `GaleriaFotos`.
 // ==========================================================================
 
 // ==========================================
-// PESTAÑAS ACCEDER / CREAR CUENTA
+// PESTAÑAS DEL MODAL DE ACCESO
 // ==========================================
-const TABS = [
+const TABS_ACCESO = [
     { boton: 'tabAcceder',  panel: 'panelAcceder'  },
     { boton: 'tabRegistro', panel: 'panelRegistro' },
 ];
 
-function activarPestana(idBoton) {
-    TABS.forEach(({ boton, panel }) => {
+function activarPestanaAcceso(idBoton) {
+    TABS_ACCESO.forEach(({ boton, panel }) => {
         const activo = boton === idBoton;
         const elBoton = document.getElementById(boton);
         const elPanel = document.getElementById(panel);
@@ -25,17 +27,16 @@ function activarPestana(idBoton) {
         elPanel.hidden = !activo;
     });
 
-    const error = document.getElementById('loginError');
-    if (error) error.style.opacity = '0';
+    mostrarError('loginError', null);
+    mostrarError('registroError', null);
 }
 
 /**
  * Rellena los desplegables del registro.
  *
- * Los catálogos de roles y protectoras se cargaban sólo desde `iniciarPanel()`,
- * que no corre hasta después del login: en la pantalla de acceso el selector de rol
- * quedaba vacío. Ambos endpoints son públicos, así que se piden por adelantado.
- * La promesa se memoriza para no repetir la petición al alternar de pestaña.
+ * Los catálogos de roles y protectoras son públicos, así que pueden pedirse
+ * sin sesión. La promesa se memoriza para no repetir la petición al alternar
+ * de pestaña.
  */
 let promesaCatalogosRegistro = null;
 
@@ -51,10 +52,9 @@ function prepararRegistroPublico() {
     return promesaCatalogosRegistro;
 }
 
-TABS.forEach(({ boton }) => {
+TABS_ACCESO.forEach(({ boton }) => {
     document.getElementById(boton)?.addEventListener('click', () => {
-        activarPestana(boton);
-        // Al abrir «Crear cuenta» el desplegable ya debe tener sus opciones.
+        activarPestanaAcceso(boton);
         if (boton === 'tabRegistro') prepararRegistroPublico();
     });
 });
@@ -82,6 +82,7 @@ document.getElementById('regTipo')?.addEventListener('change', sincronizarCampoP
 
 document.getElementById('panelRegistro')?.addEventListener('submit', async e => {
     e.preventDefault();
+    mostrarError('registroError', null);
 
     const nombre     = document.getElementById('regNombre').value.trim();
     const email      = document.getElementById('regEmail').value.trim();
@@ -89,17 +90,16 @@ document.getElementById('panelRegistro')?.addEventListener('submit', async e => 
     const tipo       = document.getElementById('regTipo').value;
     const protectora = document.getElementById('regProtectora').value;
 
-    if (!nombre || !email || !password) return mostrarErrorLogin('Rellena todos los campos');
-    if (password.length < 8) return mostrarErrorLogin('La contraseña debe tener al menos 8 caracteres');
+    if (!nombre || !email || !password)
+        return mostrarError('registroError', 'Rellena todos los campos');
+    if (password.length < 8)
+        return mostrarError('registroError', 'La contraseña debe tener al menos 8 caracteres');
 
     const definicion = estado.roles.find(r => r.valor === tipo);
     if (definicion?.requiereProtectora && !protectora)
-        return mostrarErrorLogin('Selecciona la protectora a la que perteneces');
+        return mostrarError('registroError', 'Selecciona la protectora a la que perteneces');
 
-    const boton = document.getElementById('btnRegistrar');
-    const textoOriginal = boton.innerHTML;
-    boton.disabled = true;
-    boton.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Creando cuenta...';
+    const restaurar = botonCargando(document.getElementById('btnRegistrar'), 'Creando cuenta…');
 
     try {
         const { ok, data } = await peticion('/api/usuarios', {
@@ -107,26 +107,20 @@ document.getElementById('panelRegistro')?.addEventListener('submit', async e => 
             body: JSON.stringify({ nombre, email, password, tipo, id_protectora: protectora || null }),
         });
 
-        if (!ok) throw new Error(data?.error || 'No se pudo crear la cuenta');
-
-        await Swal.fire({
-            title: '¡Cuenta creada!',
-            text: 'Ya puedes acceder con tu correo y contraseña.',
-            icon: 'success', timer: 1800, showConfirmButton: false, timerProgressBar: true,
-        });
+        if (!ok) return mostrarError('registroError', data?.error || 'No se pudo crear la cuenta');
 
         // Se precarga el acceso con los datos recién registrados.
         e.target.reset();
         sincronizarCampoProtectoraRegistro();
-        activarPestana('tabAcceder');
+        activarPestanaAcceso('tabAcceder');
         document.getElementById('loginEmail').value = email;
         document.getElementById('loginPass').focus();
 
+        toast('Cuenta creada, ya puedes entrar');
     } catch (error) {
-        mostrarErrorLogin(error.message);
+        mostrarError('registroError', 'Error de red: ' + error.message);
     } finally {
-        boton.disabled = false;
-        boton.innerHTML = textoOriginal;
+        restaurar();
     }
 });
 
@@ -139,13 +133,14 @@ document.getElementById('panelRegistro')?.addEventListener('submit', async e => 
  * ignoraría cualquier otro valor. Un Admin sí tiene que elegir destino.
  */
 function configurarPanelAnimales() {
-    const select = document.getElementById('selectProtectora');
+    const campo  = document.getElementById('campoProtectoraAnimal');
+    const select = document.getElementById('a_protectora');
     const titulo = document.getElementById('tituloAnimales');
-    if (!select) return;
 
     const esProtectora = estado.sesion?.tipo === 'Protectora';
-    select.hidden = esProtectora;
-    select.required = !esProtectora;
+
+    if (campo)  campo.hidden = esProtectora;
+    if (select) select.required = !esProtectora;
 
     if (titulo) {
         titulo.textContent = esProtectora && estado.sesion?.nombreProtectora
@@ -159,10 +154,11 @@ function configurarPanelAnimales() {
 // ==========================================
 async function cargarCatalogo() {
     try {
-        const { q, especie } = estado.filtroCatalogo;
+        const { q, especie, provincia } = estado.filtroCatalogo;
         const params = new URLSearchParams();
         if (q) params.set('q', q);
         if (especie) params.set('especie', especie);
+        if (provincia) params.set('provincia', provincia);
 
         // El backend devuelve sólo los disponibles a quien no gestiona animales.
         const sufijo = params.toString() ? `?${params}` : '';
@@ -170,7 +166,8 @@ async function cargarCatalogo() {
         if (!ok) return;
 
         actualizarEstado({ catalogo: Array.isArray(data) ? data : [] });
-        poblarFiltroEspecies();
+        poblarFiltro('filtroEspecie', 'especie_animal', 'Todas las especies');
+        poblarFiltro('filtroProvincia', 'provincia', 'Todas las provincias');
         renderCatalogo();
         renderFavoritos();
         actualizarContadorFavoritos();
@@ -179,18 +176,18 @@ async function cargarCatalogo() {
     }
 }
 
-/** Las especies del desplegable salen de los propios datos, sin lista fija. */
-function poblarFiltroEspecies() {
-    const select = document.getElementById('filtroEspecie');
+/** Las opciones del desplegable salen de los propios datos, sin lista fija. */
+function poblarFiltro(idSelect, campo, textoVacio) {
+    const select = document.getElementById(idSelect);
     if (!select) return;
 
-    const especies = [...new Set((estado.catalogo ?? []).map(a => a.especie_animal).filter(Boolean))]
-        .sort((a, b) => a.localeCompare(b, 'es'));
+    const valores = [...new Set((estado.catalogo ?? []).map(a => a[campo]).filter(Boolean))]
+        .sort((a, b) => String(a).localeCompare(String(b), 'es'));
 
     const previo = select.value;
-    select.innerHTML = '<option value="">Todas las especies</option>' +
-        especies.map(e => `<option value="${esc(e)}">${esc(e)}</option>`).join('');
-    select.value = especies.includes(previo) ? previo : '';
+    select.innerHTML = `<option value="">${textoVacio}</option>` +
+        valores.map(v => `<option value="${esc(v)}">${esc(v)}</option>`).join('');
+    select.value = valores.includes(previo) ? previo : '';
 }
 
 /** Filtro por protectora aplicado en cliente: los datos ya están cargados. */
@@ -201,51 +198,46 @@ function catalogoFiltrado() {
     return animales.filter(a => String(a.id_protectora) === String(protectora));
 }
 
-const ICONOS_ESPECIE = {
-    perro: 'fa-dog', perra: 'fa-dog',
-    gato: 'fa-cat', gata: 'fa-cat',
-    conejo: 'fa-carrot',
-    ave: 'fa-dove', pajaro: 'fa-dove', 'pájaro': 'fa-dove',
-    pez: 'fa-fish',
-};
-
-function iconoDeEspecie(especie) {
-    const clave = String(especie ?? '').trim().toLowerCase();
-    return ICONOS_ESPECIE[clave] ?? 'fa-paw';
-}
-
 /**
  * Dibuja una tarjeta de animal. `noDisponible` marca los favoritos que ya no
  * aparecen en el catálogo (adoptados o retirados).
  */
 function tarjetaAnimal(a, { noDisponible = false } = {}) {
     const favorito = esFavorito(a.id_animal);
+    const fotos = fotosDe(a);
+    const estadoClase = esc(String(a.estado ?? '').toLowerCase());
+
+    const medio = fotos.length
+        ? `<img src="${fotos[0]}" alt="Fotografía de ${esc(a.nombre_animal)}" loading="lazy">
+           ${fotos.length > 1 ? `<span class="contador-fotos">${icono('camara', 14)}${fotos.length}</span>` : ''}`
+        : iconoEspecie(a.especie_animal, 40);
+
     return `
-        <article class="animal-card${noDisponible ? ' no-disponible' : ''}">
+        <article class="animal-card${noDisponible ? ' no-disponible' : ''}"
+                 role="button" tabindex="0"
+                 data-accion="ver-animal" data-id="${a.id_animal}"
+                 aria-label="Ver la ficha de ${esc(a.nombre_animal)}">
             <div class="animal-figura">
-                <i class="fa-solid ${iconoDeEspecie(a.especie_animal)}" aria-hidden="true"></i>
+                ${medio}
                 <button type="button"
                         class="btn-favorito${favorito ? ' es-favorito' : ''}"
                         data-accion="favorito" data-id="${a.id_animal}"
                         aria-pressed="${favorito}"
                         title="${favorito ? 'Quitar de favoritos' : 'Añadir a favoritos'}"
                         aria-label="${favorito ? 'Quitar' : 'Añadir'} ${esc(a.nombre_animal)} de favoritos">
-                    <i class="${favorito ? 'fa-solid' : 'fa-regular'} fa-heart"></i>
+                    ${icono(favorito ? 'corazon-lleno' : 'corazon', 18)}
                 </button>
             </div>
             <div class="animal-cuerpo">
                 <h3>${esc(a.nombre_animal)}</h3>
-                <div class="animal-meta">
-                    <span>${esc(a.especie_animal)}</span>
-                    ${a.edad !== null && a.edad !== undefined
-                        ? `<span class="sep">·</span><span>${esc(a.edad)} ${a.edad === 1 ? 'año' : 'años'}</span>`
-                        : ''}
-                    <span class="badge badge-${esc(String(a.estado).toLowerCase())}">${esc(a.estado)}</span>
+                <p class="animal-meta">${esc(resumenAnimal(a))}</p>
+                <div class="animal-pie">
+                    <span class="badge badge-${estadoClase}">${esc(a.estado)}</span>
+                    <span class="animal-protectora">
+                        ${icono('casa', 14)}
+                        <span>${a.nombre_protectora ? esc(a.nombre_protectora) : 'Sin protectora'}</span>
+                    </span>
                 </div>
-                <p class="animal-protectora">
-                    <i class="fa-solid fa-house-chimney"></i>
-                    ${a.nombre_protectora ? esc(a.nombre_protectora) : 'Protectora sin asignar'}
-                </p>
             </div>
         </article>`;
 }
@@ -265,10 +257,9 @@ function renderCatalogo() {
 
     grid.innerHTML = animales.length
         ? animales.map(a => tarjetaAnimal(a)).join('')
-        : `<p class="catalogo-vacio">
-               <i class="fa-solid fa-paw"></i>
-               No hay animales que coincidan con tu búsqueda.
-           </p>`;
+        : `<div class="estado-vacio">${icono('patas', 28)}
+               <span>No hay animales que coincidan con tu búsqueda.</span>
+           </div>`;
 }
 
 /** Pequeño debounce para no lanzar una petición por cada tecla. */
@@ -287,9 +278,11 @@ document.getElementById('buscarCatalogo')?.addEventListener('input', e => {
     buscarEnCatalogo();
 });
 
-document.getElementById('filtroEspecie')?.addEventListener('change', e => {
-    actualizarEstado({ filtroCatalogo: { ...estado.filtroCatalogo, especie: e.target.value } });
-    cargarCatalogo();
+[['filtroEspecie', 'especie'], ['filtroProvincia', 'provincia']].forEach(([id, clave]) => {
+    document.getElementById(id)?.addEventListener('change', e => {
+        actualizarEstado({ filtroCatalogo: { ...estado.filtroCatalogo, [clave]: e.target.value } });
+        cargarCatalogo();
+    });
 });
 
 document.getElementById('filtroProtectoraCat')?.addEventListener('change', e => {
@@ -354,6 +347,12 @@ function alternarFavorito(idAnimal) {
     renderCatalogo();
     renderFavoritos();
     actualizarContadorFavoritos();
+
+    // Si la ficha está abierta, su botón debe reflejar el cambio.
+    if (modalFicha?.open) {
+        const animal = (estado.catalogo ?? []).find(a => Number(a.id_animal) === id);
+        if (animal) abrirFicha(animal);
+    }
 }
 
 function actualizarContadorFavoritos() {
@@ -385,24 +384,32 @@ function renderFavoritos() {
 
     grid.innerHTML = encontrados.length
         ? encontrados.map(a => tarjetaAnimal(a)).join('')
-        : `<p class="catalogo-vacio">
-               <i class="fa-regular fa-heart"></i>
-               ${ids.length
+        : `<div class="estado-vacio">${icono('corazon', 28)}
+               <span>${ids.length
                    ? 'Los animales que guardaste ya no están disponibles.'
-                   : 'Todavía no has guardado ningún animal. Pulsa el corazón en el catálogo.'}
-           </p>`;
+                   : 'Todavía no has guardado ningún animal. Pulsa el corazón en el catálogo.'}</span>
+           </div>`;
 }
 
 // El corazón se gestiona por delegación: las tarjetas se repintan constantemente.
 document.addEventListener('click', e => {
     const boton = e.target.closest('[data-accion="favorito"]');
     if (!boton) return;
+
     e.preventDefault();
+    e.stopPropagation();
+
+    // Guardar favoritos exige identificarse: se abre el acceso, no un error.
+    if (!haySesion()) {
+        modalFicha?.close();
+        return abrirAcceso('favorito');
+    }
+
     alternarFavorito(boton.dataset.id);
 });
 
 // ==========================================
-// PESTAÑAS DEL PANEL DEL ADOPTANTE
+// PESTAÑAS CATÁLOGO / FAVORITOS
 // ==========================================
 const TABS_PANEL = [
     { boton: 'tabCatalogo',  panel: 'vistaCatalogo'  },
@@ -433,82 +440,213 @@ TABS_PANEL.forEach(({ boton }) => {
 });
 
 // ==========================================
-// MODAL DE EDICIÓN DE ANIMAL
+// LISTADO DE GESTIÓN DE ANIMALES
+// ==========================================
+async function cargarAnimales() {
+    try {
+        // El backend acota por sí solo: una protectora recibe únicamente los suyos.
+        const { ok, data } = await peticion('/api/animales');
+        if (!ok) return;
+
+        actualizarEstado({ animales: Array.isArray(data) ? data : [] });
+        renderAnimales();
+    } catch (e) {
+        console.error('[cargarAnimales]', e.message);
+    }
+}
+
+function renderAnimales() {
+    const lista = document.getElementById('listaAnimales');
+    if (!lista) return;
+
+    if (!estado.animales.length) {
+        lista.innerHTML = `<li class="estado-vacio">${icono('inbox', 24)}<span>Sin animales dados de alta</span></li>`;
+        return;
+    }
+
+    lista.innerHTML = estado.animales.map(a => {
+        const fotos = fotosDe(a);
+        const detalleFotos = fotos.length
+            ? ` · ${fotos.length} foto${fotos.length === 1 ? '' : 's'}`
+            : ' · sin fotos';
+
+        return `
+        <li class="item-lista">
+            <span class="item-lista-datos">
+                ${iconoEspecie(a.especie_animal, 20)}
+                <span class="item-lista-texto">
+                    <strong>${esc(a.nombre_animal)}</strong>
+                    <small>${esc(resumenAnimal(a))}${esc(detalleFotos)}</small>
+                </span>
+                <span class="badge badge-${esc(String(a.estado).toLowerCase())}">${esc(a.estado)}</span>
+            </span>
+            <span class="acciones-fila">
+                <button type="button" class="btn-icono" title="Editar animal"
+                        aria-label="Editar ${esc(a.nombre_animal)}"
+                        data-accion="editar-animal" data-id="${a.id_animal}">
+                    ${icono('editar', 18)}
+                </button>
+                <button type="button" class="btn-icono es-peligro" title="Eliminar"
+                        aria-label="Eliminar ${esc(a.nombre_animal)}"
+                        data-accion="eliminar" data-entidad="animales" data-id="${a.id_animal}">
+                    ${icono('eliminar', 18)}
+                </button>
+            </span>
+        </li>`;
+    }).join('');
+}
+
+// ==========================================
+// ALTA Y EDICIÓN DE ANIMAL
 // ==========================================
 const modalAnimal = document.getElementById('modalAnimal');
 
-function abrirModalAnimal(animal) {
+/** La galería se crea una sola vez y se rellena en cada apertura del modal. */
+let galeriaAnimal = null;
+
+function obtenerGaleria() {
+    if (!galeriaAnimal) {
+        const contenedor = document.getElementById('galeriaAnimal');
+        if (contenedor) galeriaAnimal = new GaleriaFotos(contenedor);
+    }
+    return galeriaAnimal;
+}
+
+function valorCompatible(animal, clave) {
+    const compatible = comoObjeto(animal?.compatible);
+    return compatible?.[clave] ?? 'desconocido';
+}
+
+/** `null` cuando no hay animal: el mismo modal sirve para alta y edición. */
+function abrirModalAnimal(animal = null) {
     if (!modalAnimal) return;
 
-    document.getElementById('a_id').value      = animal.id_animal;
-    document.getElementById('a_nombre').value  = animal.nombre_animal ?? '';
-    document.getElementById('a_especie').value = animal.especie_animal ?? '';
-    document.getElementById('a_edad').value    = animal.edad ?? '';
-    document.getElementById('a_estado').value  = animal.estado ?? 'Disponible';
+    const esEdicion = Boolean(animal);
+    document.getElementById('modalAnimalTitulo').textContent = esEdicion ? 'Editar animal' : 'Nuevo animal';
 
-    const error = document.getElementById('modalAnimalError');
-    if (error) { error.hidden = true; error.textContent = ''; }
+    document.getElementById('a_id').value         = animal?.id_animal ?? '';
+    document.getElementById('a_nombre').value     = animal?.nombre_animal ?? '';
+    document.getElementById('a_especie').value    = animal?.especie_animal ?? '';
+    document.getElementById('a_protectora').value = animal?.id_protectora ?? '';
+    document.getElementById('a_sexo').value       = animal?.sexo ?? '';
+    document.getElementById('a_tamano').value     = animal?.tamano ?? '';
+    // El input date exige AAAA-MM-DD; la API puede devolver una marca temporal.
+    document.getElementById('a_fechaNacimiento').value =
+        String(animal?.fecha_nacimiento ?? '').slice(0, 10);
+    document.getElementById('a_edad').value       = animal?.edad ?? '';
+    document.getElementById('a_raza').value       = animal?.raza ?? '';
+    document.getElementById('a_provincia').value  = animal?.provincia ?? '';
+    document.getElementById('a_puedeViajar').checked = Boolean(animal?.puede_viajar);
+    document.getElementById('a_estado').value     = animal?.estado ?? 'Disponible';
+    document.getElementById('a_entrega').value    = animal?.entrega_condiciones ?? '';
+    document.getElementById('a_info').value       = animal?.info_importante ?? '';
+    document.getElementById('a_compPerros').value = valorCompatible(animal, 'perros');
+    document.getElementById('a_compGatos').value  = valorCompatible(animal, 'gatos');
+    document.getElementById('a_compNinos').value  = valorCompatible(animal, 'ninos');
 
+    obtenerGaleria()?.establecer(animal ? fotosDe(animal) : []);
+
+    mostrarError('modalAnimalError', null);
+    configurarPanelAnimales();
     modalAnimal.showModal();
     document.getElementById('a_nombre').focus();
 }
 
-function cerrarModalAnimal() {
-    modalAnimal?.close();
+document.getElementById('btnNuevoAnimal')?.addEventListener('click', () => abrirModalAnimal());
+document.getElementById('btnCerrarModalAnimal')?.addEventListener('click', () => modalAnimal?.close());
+document.getElementById('btnCancelarModalAnimal')?.addEventListener('click', () => modalAnimal?.close());
+
+/** Reúne el formulario completo: campos base más los cuatro bloques de la ficha. */
+function cuerpoAnimal() {
+    const valor = id => document.getElementById(id).value.trim();
+
+    return {
+        nombre:   valor('a_nombre'),
+        especie:  valor('a_especie'),
+        edad:     valor('a_edad') === '' ? null : valor('a_edad'),
+        estado:   document.getElementById('a_estado').value,
+        id_protectora: document.getElementById('a_protectora').value || null,
+
+        sexo:             valor('a_sexo') || null,
+        tamano:           valor('a_tamano') || null,
+        fecha_nacimiento: valor('a_fechaNacimiento') || null,
+        raza:             valor('a_raza') || null,
+        provincia:        valor('a_provincia') || null,
+        puede_viajar:     document.getElementById('a_puedeViajar').checked,
+
+        entrega_condiciones: valor('a_entrega') || null,
+        info_importante:     valor('a_info') || null,
+
+        compatible: {
+            perros: document.getElementById('a_compPerros').value,
+            gatos:  document.getElementById('a_compGatos').value,
+            ninos:  document.getElementById('a_compNinos').value,
+        },
+
+        fotos: obtenerGaleria()?.valor() ?? [],
+    };
 }
 
-document.getElementById('btnCerrarModalAnimal')?.addEventListener('click', cerrarModalAnimal);
-document.getElementById('btnCancelarModalAnimal')?.addEventListener('click', cerrarModalAnimal);
-
-document.getElementById('formAnimalEditar')?.addEventListener('submit', async e => {
+document.getElementById('formAnimal')?.addEventListener('submit', async e => {
     e.preventDefault();
+    mostrarError('modalAnimalError', null);
 
-    const error = document.getElementById('modalAnimalError');
-    const fallar = mensaje => { if (error) { error.textContent = mensaje; error.hidden = false; } };
-    if (error) error.hidden = true;
+    const id = document.getElementById('a_id').value;
+    const cuerpo = cuerpoAnimal();
 
-    const id      = document.getElementById('a_id').value;
-    const nombre  = document.getElementById('a_nombre').value.trim();
-    const especie = document.getElementById('a_especie').value.trim();
-    const edad    = document.getElementById('a_edad').value;
-    const estadoAnimal = document.getElementById('a_estado').value;
+    if (!cuerpo.nombre || !cuerpo.especie)
+        return mostrarError('modalAnimalError', 'Nombre y especie son obligatorios');
 
-    if (!nombre || !especie) return fallar('Nombre y especie son obligatorios');
+    // El Admin elige destino; una protectora lo tiene impuesto por el backend.
+    const esProtectora = estado.sesion?.tipo === 'Protectora';
+    if (!id && !esProtectora && !cuerpo.id_protectora)
+        return mostrarError('modalAnimalError', 'Selecciona la protectora del animal');
 
-    const boton = document.getElementById('btnGuardarAnimal');
-    const textoOriginal = boton.innerHTML;
-    boton.disabled = true;
-    boton.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Guardando...';
+    const restaurar = botonCargando(document.getElementById('btnGuardarAnimal'));
 
     try {
-        const { ok, data } = await peticion(`/api/animales?id=${encodeURIComponent(id)}`, {
-            method: 'PATCH',
-            body: JSON.stringify({ nombre, especie, edad: edad === '' ? null : edad, estado: estadoAnimal }),
-        });
+        const { ok, data } = await peticion(
+            id ? `/api/animales?id=${encodeURIComponent(id)}` : '/api/animales',
+            { method: id ? 'PATCH' : 'POST', body: JSON.stringify(cuerpo) }
+        );
 
-        if (!ok) return fallar(data?.error || 'No se pudo actualizar el animal');
+        if (!ok) return mostrarError('modalAnimalError', data?.error || 'No se pudo guardar el animal');
 
-        cerrarModalAnimal();
+        modalAnimal?.close();
         await recargarEntidad('animales');
-        toast('¡Animal actualizado!');
+        toast(id ? 'Animal actualizado' : 'Animal dado de alta');
     } catch (err) {
-        fallar('Error de red: ' + err.message);
+        mostrarError('modalAnimalError', 'Error de red: ' + err.message);
     } finally {
-        boton.disabled = false;
-        boton.innerHTML = textoOriginal;
+        restaurar();
     }
 });
 
 // ==========================================
 // ARRANQUE
 // ==========================================
+hidratarIconos();
+
+// Los iconos de los botones se inyectan aquí para no repetir marcado SVG en el
+// HTML: el registro de DESIGN_SYSTEM.md §4 es la única fuente.
+const ICONOS_BOTON = {
+    btnMiCuenta: 'usuario',
+    btnLogout: 'salir',
+    btnCerrarAcceso: 'cerrar',
+    btnCerrarFicha: 'cerrar',
+    btnCerrarModal: 'cerrar',
+    btnCerrarModalAnimal: 'cerrar',
+    btnCerrarModalPerfil: 'cerrar',
+    togglePass: 'ojo',
+};
+
+Object.entries(ICONOS_BOTON).forEach(([id, nombre]) => {
+    const el = document.getElementById(id);
+    if (el) el.innerHTML = icono(nombre, 18);
+});
+
 const sesionGuardada = leerSesion();
-if (sesionGuardada) {
-    actualizarEstado({ sesion: sesionGuardada });
-    if (loginOverlay) loginOverlay.style.display = 'none';
-    iniciarPanel();
-} else {
-    // Sin sesión se muestra la pantalla de acceso: los desplegables del registro
-    // se preparan ya, para que la pestaña nunca aparezca con el selector vacío.
-    prepararRegistroPublico();
-}
+if (sesionGuardada) actualizarEstado({ sesion: sesionGuardada });
+
+// El catálogo se carga siempre: con sesión o sin ella.
+iniciarPanel();
