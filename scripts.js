@@ -178,6 +178,50 @@ document.querySelectorAll('[data-acceso]').forEach(boton => {
     boton.addEventListener('click', () => abrirAcceso(boton.dataset.acceso));
 });
 
+// ==========================================
+// MENÚ DE NAVEGACIÓN EN MÓVIL
+// ==========================================
+const botonMenu = document.getElementById('btnMenu');
+const navAcciones = document.getElementById('navAcciones');
+
+/** Despliega o pliega el menú, manteniendo `aria-expanded` en su sitio. */
+function alternarMenu(abrir) {
+    if (!botonMenu || !navAcciones) return;
+
+    const abierto = abrir ?? !navAcciones.classList.contains('is-abierto');
+    navAcciones.classList.toggle('is-abierto', abierto);
+    botonMenu.setAttribute('aria-expanded', String(abierto));
+    botonMenu.setAttribute('aria-label', abierto ? 'Cerrar el menú de accesos' : 'Abrir el menú de accesos');
+}
+
+botonMenu?.addEventListener('click', e => {
+    e.stopPropagation();   // el cierre por clic exterior no debe deshacerlo
+    alternarMenu();
+});
+
+// Pulsar una opción cierra el menú: la acción ya abre su propio modal.
+navAcciones?.addEventListener('click', e => {
+    if (e.target.closest('button')) alternarMenu(false);
+});
+
+// Clic fuera y Escape cierran, como cualquier desplegable.
+document.addEventListener('click', e => {
+    if (!navAcciones?.classList.contains('is-abierto')) return;
+    if (e.target.closest('#navAcciones, #btnMenu')) return;
+    alternarMenu(false);
+});
+
+document.addEventListener('keydown', e => {
+    if (e.key !== 'Escape' || !navAcciones?.classList.contains('is-abierto')) return;
+    alternarMenu(false);
+    botonMenu?.focus();
+});
+
+// Al pasar a escritorio la barra se muestra entera: un menú abierto sobraría.
+window.matchMedia('(min-width: 768px)').addEventListener('change', e => {
+    if (e.matches) alternarMenu(false);
+});
+
 document.getElementById('btnInicio')?.addEventListener('click', () => {
     window.scrollTo({ top: 0, behavior: 'smooth' });
 });

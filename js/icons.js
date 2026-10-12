@@ -38,6 +38,7 @@ const TRAZOS = Object.freeze({
     'flecha-izq': '<path d="M14.5 5.5 8 12l6.5 6.5"/>',
     'flecha-der': '<path d="M9.5 5.5 16 12l-6.5 6.5"/>',
     filtro:       '<path d="M4 6h16"/><path d="M7 12h10"/><path d="M10 18h4"/>',
+    menu:         '<path d="M4 7h16"/><path d="M4 12h16"/><path d="M4 17h16"/>',
     ojo:          '<path d="M2.8 12S6.5 5.8 12 5.8 21.2 12 21.2 12 17.5 18.2 12 18.2 2.8 12 2.8 12z"/><circle cx="12" cy="12" r="2.8"/>',
     'ojo-oculto': '<path d="M9.6 6.2A8.4 8.4 0 0 1 12 5.8c5.5 0 9.2 6.2 9.2 6.2a17 17 0 0 1-3 3.6"/><path d="M6.6 7.9A17 17 0 0 0 2.8 12S6.5 18.2 12 18.2c1.4 0 2.6-.3 3.7-.8"/><path d="M10 10a2.8 2.8 0 0 0 3.9 3.9"/><path d="m4.5 4.5 15 15"/>',
     escudo_admin: '<path d="M12 3.5 19 6v6c0 4-3 7.2-7 8.5-4-1.3-7-4.5-7-8.5V6z"/><path d="M12 9.5v5"/><path d="M9.5 12h5"/>',

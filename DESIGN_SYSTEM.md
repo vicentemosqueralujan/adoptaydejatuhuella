@@ -133,7 +133,14 @@ Múltiplos de 4 px expuestos como tokens. No se escriben valores arbitrarios.
 --shadow-lg: 0 24px 64px rgba(28, 25, 23, 0.14);
 ```
 
+```css
+--shadow-seleccion: 0 0 0 3px rgba(122, 78, 35, 0.16);
+```
+
 Sombras siempre **neutras** (derivadas de `--text-main`), nunca de color de marca.
+La única excepción es `--shadow-seleccion`: no aporta profundidad, sino que señala
+el elemento elegido (la miniatura activa de la galería). Cualquier otro uso de una
+sombra teñida de marca sigue estando prohibido.
 Un solo grosor de borde: `1px solid var(--border)`.
 
 ### Movimiento
@@ -230,6 +237,15 @@ cuatro bloques, en este orden y con estos títulos literales:
 
 Un bloque sin datos **no se renderiza**: no se muestran secciones vacías ni «—».
 
+**Galería de la ficha.** Columna flex (`flex-direction: column; gap: 0.75rem`) con la
+foto principal en 4:3 arriba y la tira de miniaturas debajo, como hermanos del mismo
+contenedor: nunca se solapan. Las miniaturas van en fila
+(`display: flex; gap: 0.5rem; justify-content: flex-start`), cada una cuadrada
+(`aspect-ratio: 1 / 1`, 60 px, `border-radius: 6px`, `object-fit: cover`). La activa
+lleva `border: 2px solid var(--primary)` y `--shadow-seleccion`; las inactivas llevan
+ese mismo borde en transparente, para que seleccionar no desplace la fila. Pulsar una
+miniatura cambia la foto principal al instante.
+
 ### 5.4 Modales
 
 ```css
@@ -284,8 +300,28 @@ Mapa fijo: `Disponible` → success · `Reservado` → warning · `Adoptado` →
 |---|---|
 | ≥ 1200 px | Contenedor máximo 1180 px centrado. Ficha a dos columnas. |
 | 768–1199 px | Rejilla de catálogo fluida. Ficha a dos columnas estrechas. |
-| < 768 px | Ficha apilada, cabecera con buscador a ancho completo, modales a 100 % menos 1 rem de margen. |
+| < 768 px | Ficha apilada, cabecera con buscador a ancho completo, modales a 100 % menos 1 rem de margen. Los accesos se pliegan tras el botón de menú. |
 | < 480 px | Rejilla de catálogo a una columna; pies de modal a ancho completo. |
+
+### Navegación en móvil
+
+Por debajo de 768 px los accesos de la cabecera se repliegan tras un botón de menú
+(icono `menu` del registro, nunca un emoji ni tres `<span>`). El desplegable:
+
+- se ancla a la fila de cabecera (`position: absolute; top: 100%`) y ocupa el ancho
+  disponible menos el canal lateral;
+- se anima sólo con `opacity` y `transform`, y alterna `visibility` para quedar fuera
+  del orden de tabulación mientras está plegado;
+- mantiene `aria-expanded` en el botón y `aria-controls` apuntando al `<nav>`;
+- se cierra al elegir una opción, al pulsar fuera, con `Esc` y al volver a escritorio.
+
+### Seguridad de área en iOS
+
+Los modales usan `max-height: min(85vh, 85dvh)`: en iPhone, `vh` ignora la barra
+flotante de Safari y `dvh` la descuenta, de modo que el menor de los dos impide que el
+pie del modal quede recortado. El pie añade además
+`padding-bottom: calc(var(--space-4) + env(safe-area-inset-bottom, 0px))` para no
+quedar bajo el indicador de inicio.
 
 Objetivo táctil mínimo de 44×44 px en todos los breakpoints.
 

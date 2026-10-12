@@ -62,7 +62,13 @@
                        aria-label="Buscar animales por nombre, raza o provincia">
             </div>
 
-            <nav class="nav-acciones" aria-label="Accesos">
+            <!-- En móvil los accesos se pliegan tras este botón; en escritorio
+                 queda oculto y la barra se muestra entera. -->
+            <button type="button" class="btn-icono nav-hamburguesa" id="btnMenu"
+                    aria-label="Abrir el menú de accesos" aria-expanded="false"
+                    aria-controls="navAcciones"></button>
+
+            <nav class="nav-acciones" id="navAcciones" aria-label="Accesos">
                 <button type="button" class="btn-texto" id="btnAccesoProtectoras" data-acceso="Protectora">
                     Acceso Protectoras
                 </button>
@@ -326,13 +332,13 @@
                         <span>Nombre</span>
                         <input type="text" id="a_nombre" required>
                     </label>
+                    <!-- Especie: texto libre con sugerencias. El desplegable propone
+                         Perro y Gato, pero admite cualquier otra (conejo, ave…). -->
                     <label class="campo">
-                        <span>Especie</span>
-                        <input type="text" id="a_especie" list="especiesSugeridas" required>
-                        <datalist id="especiesSugeridas">
-                            <option value="Perro"></option>
-                            <option value="Gato"></option>
-                        </datalist>
+                        <span>Especie <small>(perro, gato u otra)</small></span>
+                        <input type="text" id="a_especie" list="especiesSugeridas" required
+                               placeholder="Perro" autocomplete="off" maxlength="40">
+                        <datalist id="especiesSugeridas"></datalist>
                     </label>
                 </div>
 
@@ -377,8 +383,9 @@
                     </div>
                     <div class="campo-fila">
                         <label class="campo">
-                            <span>Raza</span>
-                            <input type="text" id="a_raza" maxlength="80">
+                            <span>Raza <small>(texto libre: raza o mezcla)</small></span>
+                            <input type="text" id="a_raza" maxlength="80"
+                                   placeholder="Mestizo de podenco" autocomplete="off">
                         </label>
                         <label class="campo">
                             <span>Provincia</span>

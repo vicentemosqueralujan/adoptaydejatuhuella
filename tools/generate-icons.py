@@ -12,7 +12,7 @@ from PIL import Image, ImageDraw
 
 ROOT = Path(__file__).resolve().parent.parent
 
-BRAND_BG = (67, 97, 238, 255)      # #4361ee
+BRAND_BG = (122, 78, 35, 255)      # #7A4E23 — marrón tierra del navbar
 BRAND_FG = (255, 255, 255, 255)
 SUPERSAMPLE = 8                     # renderizado 8x + reducción = bordes suaves
 CORNER_RATIO = 0.22                 # radio de esquina relativo al lienzo

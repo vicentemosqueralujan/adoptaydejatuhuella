@@ -186,7 +186,63 @@ function normalizarFicha(cuerpo, columnas) {
         });
 }
 
+// Un año de margen: la protectora suele conocer el año aproximado, no el día.
+const TOLERANCIA_EDAD_ANOS = 1;
+const MESES_POR_ANO = 12;
+
+/** Meses cumplidos desde la fecha dada; negativo si está en el futuro. */
+function mesesDesde(valor) {
+    const nacimiento = new Date(`${String(valor).slice(0, 10)}T00:00:00Z`);
+    if (Number.isNaN(nacimiento.getTime())) return null;
+
+    const hoy = new Date();
+    let meses = (hoy.getUTCFullYear() - nacimiento.getUTCFullYear()) * MESES_POR_ANO
+              + (hoy.getUTCMonth() - nacimiento.getUTCMonth());
+    if (hoy.getUTCDate() < nacimiento.getUTCDate()) meses -= 1;
+    return meses;
+}
+
+/**
+ * Coherencia entre la edad declarada y la fecha de nacimiento.
+ *
+ * Indicar sólo la fecha es suficiente: la edad se deduce de ella, que es el caso
+ * habitual de un cachorro de menos de un año. Si llegan las dos, deben concordar
+ * dentro de la tolerancia.
+ *
+ * Reproduce `validarEdadYFecha()` de js/ficha.js: el cliente avisa antes de
+ * enviar, pero la API no se fía de esa comprobación.
+ *
+ * @throws {CampoInvalido}
+ */
+function validarEdadFecha(edad, fechaNacimiento) {
+    if (fechaNacimiento === null || fechaNacimiento === undefined || fechaNacimiento === '') return;
+
+    const meses = mesesDesde(fechaNacimiento);
+    if (meses === null) throw new CampoInvalido('La fecha de nacimiento no es una fecha real');
+    if (meses < 0) throw new CampoInvalido('La fecha de nacimiento no puede ser futura');
+
+    if (edad === null || edad === undefined || edad === '') return;
+
+    const declarada = Number(edad);
+    if (!Number.isFinite(declarada)) return;   // el parser de edad ya lo rechaza
+
+    const calculada = Math.floor(meses / MESES_POR_ANO);
+    if (Math.abs(declarada - calculada) <= TOLERANCIA_EDAD_ANOS) return;
+
+    const textoCalculado = calculada === 0
+        ? `menos de 1 año (${meses} ${meses === 1 ? 'mes' : 'meses'})`
+        : `${calculada} ${calculada === 1 ? 'año' : 'años'}`;
+
+    throw new CampoInvalido(
+        `La edad (${declarada} ${declarada === 1 ? 'año' : 'años'}) no concuerda con la fecha de ` +
+        `nacimiento, que corresponde a ${textoCalculado}. Corrige uno de los dos o deja la edad ` +
+        'en blanco para calcularla a partir de la fecha.'
+    );
+}
+
 module.exports = {
+    TOLERANCIA_EDAD_ANOS,
+    validarEdadFecha,
     CampoInvalido,
     CAMPOS_BASE,
     CAMPOS_FICHA,

@@ -7,6 +7,15 @@
 // además de `icono()`, `esc()`, `toast()`, `botonCargando()` y `GaleriaFotos`.
 // ==========================================================================
 
+/**
+ * Especies ofrecidas por defecto en el filtro y en el alta.
+ *
+ * Es una sugerencia, no una lista cerrada: el campo de especie es texto libre
+ * con `datalist`, así que una protectora puede dar de alta un conejo o un ave
+ * y esa especie aparece sola en el filtro en cuanto existe un animal.
+ */
+const ESPECIES_HABITUALES = ['Perro', 'Gato'];
+
 // ==========================================
 // PESTAÑAS DEL MODAL DE ACCESO
 // ==========================================
@@ -166,7 +175,7 @@ async function cargarCatalogo() {
         if (!ok) return;
 
         actualizarEstado({ catalogo: Array.isArray(data) ? data : [] });
-        poblarFiltro('filtroEspecie', 'especie_animal', 'Todas las especies');
+        poblarFiltro('filtroEspecie', 'especie_animal', 'Todas las especies', ESPECIES_HABITUALES);
         poblarFiltro('filtroProvincia', 'provincia', 'Todas las provincias');
         renderCatalogo();
         renderFavoritos();
@@ -176,13 +185,28 @@ async function cargarCatalogo() {
     }
 }
 
-/** Las opciones del desplegable salen de los propios datos, sin lista fija. */
-function poblarFiltro(idSelect, campo, textoVacio) {
+/**
+ * Opciones del desplegable tomadas de los propios datos.
+ *
+ * `siempre` fuerza la presencia de unos valores aunque todavía no haya ningún
+ * animal de ese tipo: perro y gato son las dos especies esperadas, pero la lista
+ * no es cerrada — cualquier especie que una protectora dé de alta (conejo, ave…)
+ * aparece aquí automáticamente.
+ */
+function poblarFiltro(idSelect, campo, textoVacio, siempre = []) {
     const select = document.getElementById(idSelect);
     if (!select) return;
 
-    const valores = [...new Set((estado.catalogo ?? []).map(a => a[campo]).filter(Boolean))]
-        .sort((a, b) => String(a).localeCompare(String(b), 'es'));
+    const delCatalogo = (estado.catalogo ?? []).map(a => a[campo]).filter(Boolean);
+
+    // Sin distinguir mayúsculas: «perro» y «Perro» no deben duplicar la opción.
+    const porClave = new Map();
+    [...siempre, ...delCatalogo].forEach(v => {
+        const clave = String(v).trim().toLowerCase();
+        if (clave && !porClave.has(clave)) porClave.set(clave, String(v).trim());
+    });
+
+    const valores = [...porClave.values()].sort((a, b) => a.localeCompare(b, 'es'));
 
     const previo = select.value;
     select.innerHTML = `<option value="">${textoVacio}</option>` +
@@ -597,6 +621,11 @@ document.getElementById('formAnimal')?.addEventListener('submit', async e => {
     if (!cuerpo.nombre || !cuerpo.especie)
         return mostrarError('modalAnimalError', 'Nombre y especie son obligatorios');
 
+    // Edad y fecha de nacimiento no pueden contradecirse. La API repite esta
+    // comprobación; aquí se detiene el envío antes de gastar una petición.
+    const errorEdad = validarEdadYFecha(cuerpo.edad, cuerpo.fecha_nacimiento);
+    if (errorEdad) return mostrarError('modalAnimalError', errorEdad);
+
     // El Admin elige destino; una protectora lo tiene impuesto por el backend.
     const esProtectora = estado.sesion?.tipo === 'Protectora';
     if (!id && !esProtectora && !cuerpo.id_protectora)
@@ -627,9 +656,19 @@ document.getElementById('formAnimal')?.addEventListener('submit', async e => {
 // ==========================================
 hidratarIconos();
 
+// Las sugerencias de especie salen de la misma lista que alimenta el filtro,
+// para que no haya dos fuentes de verdad entre el HTML y el JavaScript.
+const listaEspecies = document.getElementById('especiesSugeridas');
+if (listaEspecies) {
+    listaEspecies.innerHTML = ESPECIES_HABITUALES
+        .map(e => `<option value="${esc(e)}"></option>`)
+        .join('');
+}
+
 // Los iconos de los botones se inyectan aquí para no repetir marcado SVG en el
 // HTML: el registro de DESIGN_SYSTEM.md §4 es la única fuente.
 const ICONOS_BOTON = {
+    btnMenu: 'menu',
     btnMiCuenta: 'usuario',
     btnLogout: 'salir',
     btnCerrarAcceso: 'cerrar',

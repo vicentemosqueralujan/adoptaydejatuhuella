@@ -68,6 +68,8 @@
     --shadow-sm: 0 1px 2px rgba(28, 25, 23, 0.05);
     --shadow:    0 1px 3px rgba(28, 25, 23, 0.06), 0 8px 24px rgba(28, 25, 23, 0.05);
     --shadow-lg: 0 24px 64px rgba(28, 25, 23, 0.14);
+    /* Única sombra teñida de marca: marca la selección, no da profundidad. */
+    --shadow-seleccion: 0 0 0 3px rgba(122, 78, 35, 0.16);
 
     /* Movimiento */
     --ease: cubic-bezier(0.22, 0.61, 0.36, 1);
@@ -155,6 +157,12 @@ a { color: var(--primary); text-underline-offset: 3px; }
 }
 
 .nav-acciones { display: flex; align-items: center; gap: var(--space-2); margin-left: auto; }
+
+/* El desplegable móvil se ancla a la fila de cabecera. */
+.cabecera-fila { position: relative; }
+
+/* Sólo aparece por debajo de 768 px (ver la consulta de medios del final). */
+.nav-hamburguesa { display: none; }
 
 /* ---------------------------------------------------------------- Botones -- */
 .btn-primario, .btn-secundario, .btn-texto, .btn-peligro {
@@ -377,7 +385,10 @@ legend { font-size: var(--text-sm); font-weight: 500; margin-bottom: var(--space
     inset: 0;
     width: 100%;
     max-width: min(560px, calc(100vw - 2rem));
-    max-height: calc(100dvh - 2rem);
+    /* 85vh deja siempre aire alrededor; la variante dvh evita que la barra del
+       navegador móvil recorte el pie del modal. */
+    max-height: 85vh;
+    max-height: 85dvh;
     padding: 0;
     border: none;
     border-radius: 12px;
@@ -388,6 +399,8 @@ legend { font-size: var(--text-sm); font-weight: 500; margin-bottom: var(--space
 }
 .modal::backdrop { background: rgba(28, 25, 23, 0.4); backdrop-filter: blur(2px); }
 
+/* El `display` va sólo en `[open]`: declararlo en `.modal` anularía la regla del
+   navegador `dialog:not([open]) { display: none }` y los modales cerrados se verían. */
 .modal[open] { display: flex; flex-direction: column; animation: entradaModal var(--dur) var(--ease); }
 .modal > form { display: contents; }
 
@@ -404,11 +417,15 @@ legend { font-size: var(--text-sm); font-weight: 500; margin-bottom: var(--space
 }
 .modal-head h3 { font-size: var(--text-xl); }
 
+/* Única zona que crece y scrollea. `min-height: 0` es imprescindible: sin él un
+   hijo flexible no baja de su altura de contenido y el pie se desborda. */
 .modal-body {
     display: flex; flex-direction: column; gap: var(--space-4);
     padding: var(--space-5);
+    padding-bottom: 1rem;
     overflow-y: auto;
     flex: 1 1 auto;
+    min-height: 0;
 }
 
 .modal-foot {
@@ -465,12 +482,67 @@ legend { font-size: var(--text-sm); font-weight: 500; margin-bottom: var(--space
     .panel-cuerpo { padding: var(--space-4); }
     .tabla thead th, .tabla tbody td { padding: var(--space-3) var(--space-4); }
     .modal { max-width: calc(100vw - 2rem); }
+
+    /* ---- Navegación plegada tras el botón de menú ---- */
+    .nav-hamburguesa { display: inline-flex; margin-left: auto; }
+
+    .nav-acciones {
+        position: absolute;
+        top: 100%; right: var(--space-4); left: var(--space-4);
+        z-index: 50;
+        flex-direction: column;
+        align-items: stretch;
+        gap: var(--space-1);
+        margin-left: 0;
+        padding: var(--space-2);
+        border: 1px solid var(--border);
+        border-radius: var(--radius);
+        background: var(--bg-card);
+        box-shadow: var(--shadow);
+
+        /* Plegado por defecto. Se anima sólo con transform y opacity. */
+        opacity: 0;
+        transform: translateY(-6px);
+        visibility: hidden;
+        transition: opacity var(--dur) var(--ease), transform var(--dur) var(--ease),
+                    visibility var(--dur) var(--ease);
+    }
+
+    .nav-acciones.is-abierto {
+        opacity: 1;
+        transform: none;
+        visibility: visible;
+    }
+
+    /* A lo ancho del desplegable, los controles se leen como una lista. */
+    .nav-acciones .btn-texto,
+    .nav-acciones .btn-primario { width: 100%; justify-content: flex-start; }
+    .nav-acciones .btn-icono { width: 100%; justify-content: flex-start; gap: var(--space-3); padding-inline: var(--space-3); }
+    .nav-acciones .sesion-chip { padding: var(--space-2) var(--space-3); }
+    .nav-acciones .sesion-datos { display: flex; }
 }
 
 @media (max-width: 480px) {
-    .modal-foot { flex-direction: column-reverse; }
+    /* `min(85vh, 85dvh)`: en iOS, `vh` ignora la barra flotante de Safari y
+       `dvh` la descuenta; el menor de los dos evita que recorte el pie. */
+    .modal {
+        max-height: min(85vh, 85dvh);
+        max-width: calc(100vw - 1.5rem);
+    }
+    .modal-head, .modal-body, .modal-foot { padding-inline: var(--space-4); }
+    .modal-body { padding-block: var(--space-4) 1rem; }
+
+    /* Área segura inferior: el pie no queda bajo el indicador del iPhone. */
+    .modal-foot {
+        flex-direction: column-reverse;
+        padding-bottom: calc(var(--space-4) + env(safe-area-inset-bottom, 0px));
+    }
     .modal-foot button { width: 100%; }
-    .toast-contenedor { left: var(--space-4); right: var(--space-4); }
+
+    .toast-contenedor {
+        left: var(--space-4); right: var(--space-4);
+        top: calc(var(--space-4) + env(safe-area-inset-top, 0px));
+    }
 }
 
 @media (prefers-reduced-motion: reduce) {

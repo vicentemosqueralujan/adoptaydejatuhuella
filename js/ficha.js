@@ -38,6 +38,71 @@ function edadLegible(animal) {
     return null;
 }
 
+/**
+ * Meses transcurridos desde la fecha de nacimiento, o `null` si no es una
+ * fecha utilizable. Negativo si la fecha está en el futuro.
+ */
+function mesesDesde(fecha) {
+    if (!fecha) return null;
+
+    const nacimiento = new Date(String(fecha).slice(0, 10));
+    if (Number.isNaN(nacimiento.getTime())) return null;
+
+    const hoy = new Date();
+    let meses = (hoy.getFullYear() - nacimiento.getFullYear()) * MESES_POR_ANO
+              + (hoy.getMonth() - nacimiento.getMonth());
+    if (hoy.getDate() < nacimiento.getDate()) meses -= 1;
+    return meses;
+}
+
+/** Años cumplidos según la fecha de nacimiento, o `null`. */
+function edadDesdeFecha(fecha) {
+    const meses = mesesDesde(fecha);
+    if (meses === null || meses < 0) return null;
+    return Math.floor(meses / MESES_POR_ANO);
+}
+
+// Un año de margen: la protectora suele conocer el año aproximado, no el día.
+const TOLERANCIA_EDAD_ANOS = 1;
+
+/**
+ * Comprueba que la edad declarada y la fecha de nacimiento no se contradigan.
+ *
+ * Con sólo la fecha basta: la edad se calcula sola, y por eso en un cachorro de
+ * menos de un año no hace falta rellenar el campo de edad. Si se informan los
+ * dos, deben concordar dentro de la tolerancia.
+ *
+ * Misma regla que `validarEdadFecha()` en api/_animal-campos.js: el cliente
+ * avisa antes de enviar y la API vuelve a comprobarlo.
+ *
+ * @returns {string|null} mensaje de error, o `null` si es coherente.
+ */
+function validarEdadYFecha(edad, fecha) {
+    const hayEdad = edad !== null && edad !== undefined && String(edad).trim() !== '';
+
+    if (!fecha) return null;
+
+    const meses = mesesDesde(fecha);
+    if (meses === null) return 'La fecha de nacimiento no es una fecha válida';
+    if (meses < 0) return 'La fecha de nacimiento no puede ser futura';
+
+    if (!hayEdad) return null;   // la edad se deduce de la fecha
+
+    const declarada = Number(edad);
+    if (!Number.isFinite(declarada)) return 'La edad debe ser un número de años';
+
+    const calculada = Math.floor(meses / MESES_POR_ANO);
+    if (Math.abs(declarada - calculada) <= TOLERANCIA_EDAD_ANOS) return null;
+
+    const textoCalculado = calculada === 0
+        ? `menos de 1 año (${meses} ${meses === 1 ? 'mes' : 'meses'})`
+        : `${calculada} ${calculada === 1 ? 'año' : 'años'}`;
+
+    return `La edad (${declarada} ${declarada === 1 ? 'año' : 'años'}) no concuerda con la ` +
+           `fecha de nacimiento, que corresponde a ${textoCalculado}. ` +
+           'Corrige uno de los dos o deja la edad en blanco para calcularla a partir de la fecha.';
+}
+
 /** Fecha en formato largo español, o `null` si no la hay. */
 function fechaLegible(valor) {
     if (!valor) return null;
@@ -155,12 +220,15 @@ function galeriaFicha(a) {
         ? `<img src="${fotos[0]}" alt="Fotografía de ${esc(a.nombre_animal)}" id="fichaFotoPrincipal">`
         : iconoEspecie(a.especie_animal, 64);
 
+    // La tira de miniaturas es un hermano de la foto principal dentro del flex
+    // vertical, así que ocupa su propia fila y nunca se superpone a ella.
     const miniaturas = fotos.length > 1
-        ? `<div class="ficha-miniaturas">
+        ? `<div class="ficha-miniaturas" role="group" aria-label="Fotografías de ${esc(a.nombre_animal)}">
                ${fotos.map((f, i) => `
                    <button type="button" class="ficha-miniatura${i === 0 ? ' is-active' : ''}"
                            data-accion="ficha-foto" data-src="${f}"
-                           aria-label="Ver la fotografía ${i + 1}">
+                           aria-pressed="${i === 0}"
+                           aria-label="Ver la fotografía ${i + 1} de ${fotos.length}">
                        <img src="${f}" alt="" loading="lazy">
                    </button>`).join('')}
            </div>`
@@ -219,11 +287,17 @@ document.addEventListener('click', e => {
     const boton = e.target.closest('[data-accion="ficha-foto"]');
     if (!boton) return;
 
+    // Cambio inmediato: la imagen ya está descargada por la propia miniatura,
+    // así que asignar `src` la muestra sin recarga ni parpadeo.
     const principal = document.getElementById('fichaFotoPrincipal');
     if (principal) principal.src = boton.dataset.src;
 
-    document.querySelectorAll('.ficha-miniatura').forEach(m => m.classList.remove('is-active'));
+    document.querySelectorAll('.ficha-miniatura').forEach(m => {
+        m.classList.remove('is-active');
+        m.setAttribute('aria-pressed', 'false');
+    });
     boton.classList.add('is-active');
+    boton.setAttribute('aria-pressed', 'true');
 });
 
 // Apertura de la ficha desde la tarjeta, por ratón y por teclado.

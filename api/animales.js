@@ -6,6 +6,7 @@ const {
     columnasDisponibles,
     columnasSelect,
     normalizarFicha,
+    validarEdadFecha,
 } = require('./_animal-campos.js');
 
 const PERMISO_GESTION   = 'animales:gestionar';
@@ -116,6 +117,10 @@ async function crear(req, columnas, { protectoraPropia }) {
 
     const ficha = normalizarFicha(req.body, columnas);
 
+    // La fecha ya pasó su validación de formato en `normalizarFicha`; aquí se
+    // comprueba que no contradiga la edad declarada.
+    validarEdadFecha(edadNormalizada, req.body?.fecha_nacimiento);
+
     const nombresColumnas = ['nombre_animal', 'especie_animal', 'edad', 'estado', 'id_protectora',
                              ...ficha.map(f => f.columna)];
     const valores = [nombre.trim(), especie.trim(), edadNormalizada, ESTADO_DISPONIBLE, destino,
@@ -131,7 +136,7 @@ async function crear(req, columnas, { protectoraPropia }) {
     return { estado: 201, cuerpo: { ok: true, animal: rows[0] ?? null } };
 }
 
-async function actualizar(req, columnas, id) {
+async function actualizar(req, columnas, id, actual = {}) {
     const { nombre, especie, edad, estado } = req.body ?? {};
     const ficha = normalizarFicha(req.body, columnas);
 
@@ -149,6 +154,14 @@ async function actualizar(req, columnas, id) {
 
     if (edad !== undefined && parsearEdad(edad) === undefined)
         return { estado: 400, cuerpo: { error: `La edad debe ser un número entre 0 y ${EDAD_MAXIMA}` } };
+
+    // Un PATCH puede traer sólo uno de los dos campos: el que no venga se toma
+    // del registro guardado, para no dejar pasar una combinación incoherente.
+    const edadFinal = edad !== undefined ? parsearEdad(edad) : (actual.edad ?? null);
+    const fechaFinal = req.body?.fecha_nacimiento !== undefined
+        ? req.body.fecha_nacimiento
+        : (actual.fecha_nacimiento ?? null);
+    validarEdadFecha(edadFinal, fechaFinal);
 
     // Sólo se tocan las columnas realmente enviadas: el resto queda intacto.
     const asignaciones = [];
@@ -210,9 +223,13 @@ module.exports = async function handler(req, res) {
         if (!id) return res.status(400).json({ error: 'Identificador de animal no válido' });
 
         // Propiedad: una protectora no puede tocar los animales de otra.
-        const { rows: existentes } = await sql`
-            SELECT id_animal, id_protectora FROM animal WHERE id_animal = ${id} LIMIT 1
-        `;
+        // Se recuperan también edad y fecha para poder validar un PATCH parcial.
+        const columnasActuales = ['id_animal', 'id_protectora', 'edad',
+                                  ...(columnas.has('fecha_nacimiento') ? ['fecha_nacimiento'] : [])];
+        const { rows: existentes } = await sql.query(
+            `SELECT ${columnasActuales.join(', ')} FROM animal WHERE id_animal = $1 LIMIT 1`,
+            [id],
+        );
         const animal = existentes[0];
         if (!animal) return res.status(404).json({ error: 'Animal no encontrado' });
 
@@ -225,7 +242,7 @@ module.exports = async function handler(req, res) {
         }
 
         if (method === 'PATCH') {
-            const { estado, cuerpo } = await actualizar(req, columnas, id);
+            const { estado, cuerpo } = await actualizar(req, columnas, id, animal);
             return res.status(estado).json(cuerpo);
         }
 
