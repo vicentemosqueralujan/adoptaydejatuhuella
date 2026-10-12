@@ -73,16 +73,25 @@
             <h1>🐾 Adopta y Deja tu Huella</h1>
             <p>Panel Administrativo</p>
         </div>
-        <button onclick="logout()" class="btn-logout" title="Cerrar sesión">
-            <i class="fa-solid fa-right-from-bracket"></i>
-        </button>
+        <div class="header-actions">
+            <div id="sesionChip" class="sesion-chip" hidden>
+                <span class="sesion-avatar" id="sesionAvatar" aria-hidden="true"></span>
+                <span class="sesion-datos">
+                    <strong id="sesionNombre"></strong>
+                    <span class="badge" id="sesionRol"></span>
+                </span>
+            </div>
+            <button type="button" id="btnLogout" class="btn-logout" title="Cerrar sesión">
+                <i class="fa-solid fa-right-from-bracket"></i>
+            </button>
+        </div>
     </header>
 
     <!-- ===== DASHBOARD ===== -->
     <main class="dashboard-grid">
 
         <!-- PROTECTORAS -->
-        <section class="card">
+        <section class="card" data-permiso="protectoras:gestionar" hidden>
             <h2>🏢 Protectoras</h2>
             <form id="formProtectora" class="admin-form">
                 <input type="text" id="p_nombre" placeholder="Nombre de la protectora" required>
@@ -96,27 +105,8 @@
             </ul>
         </section>
 
-        <!-- USUARIOS -->
-        <section class="card">
-            <h2>👤 Usuarios</h2>
-            <form id="formUsuario" class="admin-form">
-                <input type="text" id="u_nombre" placeholder="Nombre completo" required>
-                <input type="email" id="u_email" placeholder="Correo electrónico" required>
-                <select id="u_tipo">
-                    <option value="Adoptante">Adoptante</option>
-                    <option value="Admin">Admin</option>
-                </select>
-                <button type="submit" class="btn-add">
-                    <i class="fa-solid fa-user-plus"></i> Crear usuario
-                </button>
-            </form>
-            <ul id="listaUsuarios" class="data-list">
-                <li class="empty-state"><i class="fa-solid fa-inbox"></i> Sin registros</li>
-            </ul>
-        </section>
-
         <!-- ANIMALES -->
-        <section class="card">
+        <section class="card" data-permiso="animales:gestionar" hidden>
             <h2>🐕 Animales</h2>
             <form id="animalForm" class="admin-form">
                 <input type="text" id="nombre" placeholder="Nombre del animal" required>
@@ -135,6 +125,102 @@
         </section>
 
     </main>
+
+    <!-- ===== PANEL DE ADMINISTRACIÓN DE USUARIOS (solo rol Admin) ===== -->
+    <section class="admin-panel" id="panelUsuarios" data-permiso="usuarios:gestionar" hidden
+             aria-labelledby="panelUsuariosTitulo">
+        <div class="panel-head">
+            <div>
+                <h2 id="panelUsuariosTitulo"><i class="fa-solid fa-users-gear"></i> Gestión de usuarios</h2>
+                <p class="panel-sub">Alta, edición de rol y asignación de protectora.</p>
+            </div>
+            <div class="panel-tools">
+                <div class="search-wrap">
+                    <i class="fa-solid fa-magnifying-glass" aria-hidden="true"></i>
+                    <input type="search" id="buscarUsuario" placeholder="Buscar por nombre, email o rol"
+                           aria-label="Buscar usuarios">
+                </div>
+                <button type="button" id="btnNuevoUsuario" class="btn-add btn-compact">
+                    <i class="fa-solid fa-user-plus"></i> Nuevo usuario
+                </button>
+            </div>
+        </div>
+
+        <div class="tabla-wrap">
+            <table class="tabla-usuarios">
+                <caption class="sr-only">Listado de usuarios registrados con su rol y protectora asignada</caption>
+                <thead>
+                    <tr>
+                        <th scope="col">Usuario</th>
+                        <th scope="col">Correo</th>
+                        <th scope="col">Rol</th>
+                        <th scope="col">Protectora</th>
+                        <th scope="col" class="col-acciones">Acciones</th>
+                    </tr>
+                </thead>
+                <tbody id="tbodyUsuarios">
+                    <tr class="fila-vacia">
+                        <td colspan="5"><i class="fa-solid fa-inbox"></i> Sin registros</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </section>
+
+    <!-- ===== MODAL DE ALTA / EDICIÓN DE USUARIO ===== -->
+    <dialog id="modalUsuario" class="modal" aria-labelledby="modalUsuarioTitulo">
+        <form id="formUsuario" method="dialog" class="modal-form" novalidate>
+            <div class="modal-head">
+                <h3 id="modalUsuarioTitulo">Nuevo usuario</h3>
+                <button type="button" class="btn-cerrar" id="btnCerrarModal" aria-label="Cerrar">
+                    <i class="fa-solid fa-xmark"></i>
+                </button>
+            </div>
+
+            <div class="modal-body">
+                <input type="hidden" id="u_id">
+
+                <label class="campo">
+                    <span>Nombre completo</span>
+                    <input type="text" id="u_nombre" required autocomplete="name">
+                </label>
+
+                <label class="campo">
+                    <span>Correo electrónico</span>
+                    <input type="email" id="u_email" required autocomplete="email">
+                </label>
+
+                <label class="campo">
+                    <span>Contraseña <small id="u_passHint">(mínimo 8 caracteres)</small></span>
+                    <input type="password" id="u_password" minlength="8" autocomplete="new-password">
+                </label>
+
+                <label class="campo">
+                    <span>Rol</span>
+                    <select id="u_tipo" required>
+                        <!-- Opciones cargadas desde /api/roles -->
+                    </select>
+                    <small class="campo-ayuda" id="u_rolDesc"></small>
+                </label>
+
+                <label class="campo" id="campoProtectora" hidden>
+                    <span>Protectora asignada</span>
+                    <select id="u_protectora">
+                        <option value="">— Selecciona protectora —</option>
+                    </select>
+                </label>
+
+                <p class="modal-error" id="modalError" hidden role="alert"></p>
+            </div>
+
+            <div class="modal-foot">
+                <button type="button" class="btn-secundario" id="btnCancelarModal">Cancelar</button>
+                <button type="submit" class="btn-add btn-compact" id="btnGuardarUsuario">
+                    <i class="fa-solid fa-floppy-disk"></i> Guardar
+                </button>
+            </div>
+        </form>
+    </dialog>
 
     <script src="scripts.js" defer></script>
 </body>

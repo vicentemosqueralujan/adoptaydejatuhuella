@@ -1,33 +1,112 @@
 // ==========================================
-// CONFIGURACIÓN Y SELECTORES
+// ESTADO DE SESIÓN Y PERMISOS
+// ==========================================
+const CLAVE_SESION = 'adminSession';
+
+/** Estado en memoria. Se reemplaza entero en cada cambio, nunca se muta. */
+let estado = {
+    sesion: null,
+    roles: [],
+    rolPorDefecto: 'Adoptante',
+    protectoras: [],
+    usuarios: [],
+    filtroUsuarios: '',
+};
+
+function actualizarEstado(cambios) {
+    estado = { ...estado, ...cambios };
+}
+
+function leerSesion() {
+    try {
+        const crudo = localStorage.getItem(CLAVE_SESION);
+        return crudo ? JSON.parse(crudo) : null;
+    } catch {
+        // Sesión corrupta: se descarta en lugar de romper el arranque.
+        localStorage.removeItem(CLAVE_SESION);
+        return null;
+    }
+}
+
+function tienePermiso(permiso) {
+    return Array.isArray(estado.sesion?.permisos) && estado.sesion.permisos.includes(permiso);
+}
+
+/** Muestra u oculta cada bloque según los permisos del usuario autenticado. */
+function aplicarPermisos() {
+    document.querySelectorAll('[data-permiso]').forEach(el => {
+        el.hidden = !tienePermiso(el.dataset.permiso);
+    });
+
+    const chip = document.getElementById('sesionChip');
+    if (!chip) return;
+
+    const sesion = estado.sesion;
+    chip.hidden = !sesion;
+    if (!sesion) return;
+
+    document.getElementById('sesionNombre').textContent = sesion.nombre ?? '';
+    document.getElementById('sesionAvatar').textContent = iniciales(sesion.nombre);
+
+    const rol = document.getElementById('sesionRol');
+    rol.textContent = sesion.etiquetaRol ?? sesion.tipo ?? '';
+    rol.className = `badge badge-${String(sesion.tipo ?? '').toLowerCase()}`;
+}
+
+// ==========================================
+// UTILIDADES
+// ==========================================
+
+/** Escapa texto antes de insertarlo en HTML: los datos vienen de la base de datos. */
+function esc(valor) {
+    return String(valor ?? '').replace(/[&<>"']/g, c => (
+        { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]
+    ));
+}
+
+function iniciales(nombre) {
+    return String(nombre ?? '?')
+        .trim()
+        .split(/\s+/)
+        .slice(0, 2)
+        .map(p => p[0] ?? '')
+        .join('')
+        .toUpperCase() || '?';
+}
+
+function toast(titulo, icon = 'success') {
+    Swal.fire({ title: titulo, icon, toast: true, position: 'top-end', timer: 2000, showConfirmButton: false });
+}
+
+/** Envuelve fetch devolviendo siempre `{ ok, status, data }` sin lanzar por HTTP. */
+async function peticion(url, opciones = {}) {
+    const cabeceras = { ...opciones.headers };
+    if (opciones.body) cabeceras['Content-Type'] = 'application/json';
+    // Identifica al solicitante ante la API (ver la limitación anotada en api/_auth.js).
+    if (estado.sesion?.id) cabeceras['X-Usuario-Id'] = String(estado.sesion.id);
+
+    const res = await fetch(url, { ...opciones, headers: cabeceras });
+
+    let data = null;
+    try { data = await res.json(); } catch { /* respuesta sin cuerpo */ }
+
+    return { ok: res.ok, status: res.status, data };
+}
+
+// ==========================================
+// LOGIN
 // ==========================================
 const loginOverlay = document.getElementById('loginOverlay');
 const btnEntrar    = document.getElementById('btnEntrar');
 
-// Verificación inmediata de sesión al cargar
-if (localStorage.getItem('adminSession')) {
-    if (loginOverlay) loginOverlay.style.display = 'none';
-    cargarTodo();
-}
-
-// ==========================================
-// TOGGLE OJO CONTRASEÑA
-// ==========================================
 document.getElementById('togglePass')?.addEventListener('click', () => {
     const input = document.getElementById('loginPass');
     const icon  = document.querySelector('#togglePass i');
-    if (input.type === 'password') {
-        input.type = 'text';
-        icon.classList.replace('fa-eye', 'fa-eye-slash');
-    } else {
-        input.type = 'password';
-        icon.classList.replace('fa-eye-slash', 'fa-eye');
-    }
+    const oculta = input.type === 'password';
+    input.type = oculta ? 'text' : 'password';
+    icon.classList.replace(oculta ? 'fa-eye' : 'fa-eye-slash', oculta ? 'fa-eye-slash' : 'fa-eye');
 });
 
-// ==========================================
-// SISTEMA DE LOGIN
-// ==========================================
 if (btnEntrar) {
     btnEntrar.addEventListener('click', handleLogin);
     ['loginEmail', 'loginPass'].forEach(id => {
@@ -41,47 +120,37 @@ async function handleLogin() {
     const email = document.getElementById('loginEmail').value.trim();
     const pass  = document.getElementById('loginPass').value.trim();
 
-    if (!email || !pass) {
-        mostrarErrorLogin('Rellena todos los campos');
-        return;
-    }
+    if (!email || !pass) return mostrarErrorLogin('Rellena todos los campos');
 
     btnEntrar.disabled = true;
     const originalHTML = btnEntrar.innerHTML;
     btnEntrar.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Verificando...';
 
     try {
-        const response = await fetch('/api/login', {
+        const { ok, data } = await peticion('/api/login', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ email, password: pass })
+            body: JSON.stringify({ email, password: pass }),
         });
 
-        let data;
-        try { data = await response.json(); }
-        catch { throw new Error('Respuesta inválida del servidor.'); }
+        if (!ok || !data?.success) throw new Error(data?.message || 'Credenciales incorrectas');
 
-        if (!response.ok || !data.success) {
-            throw new Error(data.message || 'Credenciales incorrectas');
-        }
+        // La respuesta del login ya trae rol, protectora y permisos: el panel se
+        // puede renderizar sin una segunda petición.
+        localStorage.setItem(CLAVE_SESION, JSON.stringify(data.user));
+        actualizarEstado({ sesion: data.user });
 
-        // ✅ SESIÓN EXITOSA
-        localStorage.setItem('adminSession', JSON.stringify(data.user));
         btnEntrar.style.background = '#10b981';
-        btnEntrar.innerHTML = '<i class="fas fa-check"></i> ¡Bienvenido, ' + data.user.nombre + '!';
+        btnEntrar.innerHTML = `<i class="fas fa-check"></i> ¡Bienvenido, ${esc(data.user.nombre)}!`;
 
         await Swal.fire({
             title: '¡Acceso concedido!',
-            text: 'Bienvenido de nuevo, ' + data.user.nombre,
-            icon: 'success',
-            timer: 1400,
-            showConfirmButton: false,
-            timerProgressBar: true
+            text: `Bienvenido de nuevo, ${data.user.nombre} (${data.user.etiquetaRol ?? data.user.tipo})`,
+            icon: 'success', timer: 1400, showConfirmButton: false, timerProgressBar: true,
         });
 
         loginOverlay.style.transition = 'opacity 0.4s ease';
         loginOverlay.style.opacity = '0';
-        setTimeout(() => { loginOverlay.style.display = 'none'; cargarTodo(); }, 400);
+        setTimeout(() => { loginOverlay.style.display = 'none'; iniciarPanel(); }, 400);
 
     } catch (error) {
         mostrarErrorLogin(error.message);
@@ -109,44 +178,79 @@ function mostrarErrorLogin(mensaje) {
     errorEl._timer = setTimeout(() => { errorEl.style.opacity = '0'; }, 4000);
 }
 
-function logout() {
+document.getElementById('btnLogout')?.addEventListener('click', () => {
     Swal.fire({
-        title: '¿Cerrar sesión?',
-        icon: 'question',
-        showCancelButton: true,
-        confirmButtonColor: '#ef233c',
-        cancelButtonText: 'Cancelar',
-        confirmButtonText: 'Sí, salir'
-    }).then(r => { if (r.isConfirmed) { localStorage.removeItem('adminSession'); location.reload(); } });
+        title: '¿Cerrar sesión?', icon: 'question', showCancelButton: true,
+        confirmButtonColor: '#ef233c', cancelButtonText: 'Cancelar', confirmButtonText: 'Sí, salir',
+    }).then(r => {
+        if (r.isConfirmed) { localStorage.removeItem(CLAVE_SESION); location.reload(); }
+    });
+});
+
+// ==========================================
+// ARRANQUE DEL PANEL
+// ==========================================
+async function iniciarPanel() {
+    aplicarPermisos();
+
+    // El catálogo de roles y las protectoras alimentan los desplegables del modal.
+    await Promise.all([cargarCatalogoRoles(), cargarProtectoras()]);
+    await Promise.all([
+        tienePermiso('usuarios:gestionar') ? cargarUsuarios() : Promise.resolve(),
+        cargarAnimales(),
+    ]);
+}
+
+async function cargarCatalogoRoles() {
+    try {
+        const { ok, data } = await peticion('/api/roles');
+        if (!ok) return;
+
+        actualizarEstado({ roles: data.roles ?? [], rolPorDefecto: data.porDefecto ?? 'Adoptante' });
+
+        const select = document.getElementById('u_tipo');
+        if (!select) return;
+
+        // El desplegable se construye desde la API: añadir un rol en el backend
+        // lo hace aparecer aquí sin tocar el frontend.
+        select.innerHTML = estado.roles
+            .map(r => `<option value="${esc(r.valor)}">${esc(r.etiqueta)}</option>`)
+            .join('');
+        select.value = estado.rolPorDefecto;
+        sincronizarCampoProtectora();
+    } catch (e) {
+        console.error('[cargarCatalogoRoles]', e.message);
+    }
 }
 
 // ==========================================
-// CARGA DE DATOS (REPARADO)
+// PROTECTORAS
 // ==========================================
-async function cargarTodo() {
-    await Promise.all([cargarProtectoras(), cargarUsuarios(), cargarAnimales()]);
-}
-
 async function cargarProtectoras() {
     try {
-        const res  = await fetch('/api/protectoras');
-        const data = await res.json();
-        const lista  = document.getElementById('listaProtectoras');
-        const select = document.getElementById('selectProtectora');
+        const { ok, data } = await peticion('/api/protectoras');
+        if (!ok) return;
 
+        const protectoras = Array.isArray(data) ? data : [];
+        actualizarEstado({ protectoras });
+
+        const lista = document.getElementById('listaProtectoras');
         if (lista) {
-            lista.innerHTML = data.length
-                ? data.map(p => `
+            lista.innerHTML = protectoras.length
+                ? protectoras.map(p => `
                     <li class="item-lista">
                         <span>
                             <i class="fa-solid fa-house-chimney" style="color:#4361ee;margin-right:8px"></i>
-                            ${p.nombre_protectora}
+                            ${esc(p.nombre_protectora)}
                         </span>
                         <div class="btn-group">
-                            <button onclick="editar('protectoras', ${p.id_protectora}, '${p.nombre_protectora.replace(/'/g, "\\'")}')" class="btn-edit" title="Editar">
+                            <button type="button" class="btn-edit" title="Editar"
+                                    data-accion="editar" data-entidad="protectoras"
+                                    data-id="${p.id_protectora}" data-nombre="${esc(p.nombre_protectora)}">
                                 <i class="fa-solid fa-pen"></i>
                             </button>
-                            <button onclick="eliminar('protectoras', ${p.id_protectora})" class="btn-del" title="Eliminar">
+                            <button type="button" class="btn-del" title="Eliminar"
+                                    data-accion="eliminar" data-entidad="protectoras" data-id="${p.id_protectora}">
                                 <i class="fa-solid fa-trash"></i>
                             </button>
                         </div>
@@ -154,161 +258,354 @@ async function cargarProtectoras() {
                 : '<li class="empty-state"><i class="fa-solid fa-inbox"></i> Sin registros</li>';
         }
 
-        if (select) select.innerHTML = data.map(p =>
-            `<option value="${p.id_protectora}">${p.nombre_protectora}</option>`
-        ).join('');
-    } catch (e) { console.error('[cargarProtectoras]', e.message); }
+        const opciones = protectoras
+            .map(p => `<option value="${p.id_protectora}">${esc(p.nombre_protectora)}</option>`)
+            .join('');
+
+        const selAnimal = document.getElementById('selectProtectora');
+        if (selAnimal) selAnimal.innerHTML = '<option value="">— Selecciona protectora —</option>' + opciones;
+
+        const selUsuario = document.getElementById('u_protectora');
+        if (selUsuario) {
+            const previo = selUsuario.value;
+            selUsuario.innerHTML = '<option value="">— Selecciona protectora —</option>' + opciones;
+            selUsuario.value = previo;
+        }
+    } catch (e) {
+        console.error('[cargarProtectoras]', e.message);
+    }
 }
 
+// ==========================================
+// USUARIOS — TABLA DE GESTIÓN
+// ==========================================
 async function cargarUsuarios() {
     try {
-        const res  = await fetch('/api/usuarios');
-        const data = await res.json();
-        const lista = document.getElementById('listaUsuarios');
-        if (lista) {
-            lista.innerHTML = data.length
-                ? data.map(u => `
-                    <li class="item-lista">
-                        <span>
-                            <i class="fa-solid fa-user-circle" style="color:#4361ee;margin-right:8px"></i>
-                            ${u.nombre_usuario}
-                            <span class="badge badge-${u.tipo_usuario.toLowerCase()}">${u.tipo_usuario}</span>
-                        </span>
-                        <div class="btn-group">
-                            <button onclick="editar('usuarios', ${u.id_usuario}, '${u.nombre_usuario.replace(/'/g, "\\'")}')" class="btn-edit" title="Editar">
-                                <i class="fa-solid fa-pen"></i>
-                            </button>
-                            <button onclick="eliminar('usuarios', ${u.id_usuario})" class="btn-del" title="Eliminar">
-                                <i class="fa-solid fa-user-xmark"></i>
-                            </button>
-                        </div>
-                    </li>`).join('')
-                : '<li class="empty-state"><i class="fa-solid fa-inbox"></i> Sin registros</li>';
-        }
-    } catch (e) { console.error('[cargarUsuarios]', e.message); }
+        const { ok, data } = await peticion('/api/usuarios');
+        if (!ok) return;
+
+        actualizarEstado({ usuarios: Array.isArray(data) ? data : [] });
+        renderUsuarios();
+    } catch (e) {
+        console.error('[cargarUsuarios]', e.message);
+    }
 }
 
+function usuariosFiltrados() {
+    const q = estado.filtroUsuarios.trim().toLowerCase();
+    if (!q) return estado.usuarios;
+
+    return estado.usuarios.filter(u =>
+        [u.nombre_usuario, u.email, u.tipo_usuario, u.nombre_protectora]
+            .some(campo => String(campo ?? '').toLowerCase().includes(q))
+    );
+}
+
+function renderUsuarios() {
+    const tbody = document.getElementById('tbodyUsuarios');
+    if (!tbody) return;
+
+    const filas = usuariosFiltrados();
+
+    if (!filas.length) {
+        const mensaje = estado.filtroUsuarios ? 'Ningún usuario coincide con la búsqueda' : 'Sin registros';
+        tbody.innerHTML = `<tr class="fila-vacia"><td colspan="5"><i class="fa-solid fa-inbox"></i> ${mensaje}</td></tr>`;
+        return;
+    }
+
+    tbody.innerHTML = filas.map(u => `
+        <tr>
+            <td>
+                <div class="celda-usuario">
+                    <span class="sesion-avatar" aria-hidden="true">${esc(iniciales(u.nombre_usuario))}</span>
+                    <b>${esc(u.nombre_usuario)}</b>
+                </div>
+            </td>
+            <td class="celda-email">${esc(u.email)}</td>
+            <td><span class="badge badge-${esc(String(u.tipo_usuario).toLowerCase())}">${esc(u.tipo_usuario)}</span></td>
+            <td>${u.nombre_protectora
+                ? esc(u.nombre_protectora)
+                : '<span class="sin-asignar">Sin asignar</span>'}</td>
+            <td class="col-acciones">
+                <div class="btn-group">
+                    <button type="button" class="btn-edit" title="Editar usuario"
+                            data-accion="editar-usuario" data-id="${u.id_usuario}">
+                        <i class="fa-solid fa-pen"></i>
+                    </button>
+                    <button type="button" class="btn-del" title="Eliminar usuario"
+                            data-accion="eliminar" data-entidad="usuarios" data-id="${u.id_usuario}">
+                        <i class="fa-solid fa-user-xmark"></i>
+                    </button>
+                </div>
+            </td>
+        </tr>`).join('');
+}
+
+document.getElementById('buscarUsuario')?.addEventListener('input', e => {
+    actualizarEstado({ filtroUsuarios: e.target.value });
+    renderUsuarios();
+});
+
+// ==========================================
+// MODAL DE ALTA / EDICIÓN DE USUARIO
+// ==========================================
+const modalUsuario = document.getElementById('modalUsuario');
+
+/** Muestra el selector de protectora solo para los roles que la exigen. */
+function sincronizarCampoProtectora() {
+    const select = document.getElementById('u_tipo');
+    const campo  = document.getElementById('campoProtectora');
+    const ayuda  = document.getElementById('u_rolDesc');
+    if (!select || !campo) return;
+
+    const definicion = estado.roles.find(r => r.valor === select.value);
+    campo.hidden = !definicion?.requiereProtectora;
+    document.getElementById('u_protectora').required = Boolean(definicion?.requiereProtectora);
+    if (ayuda) ayuda.textContent = definicion?.descripcion ?? '';
+}
+
+document.getElementById('u_tipo')?.addEventListener('change', sincronizarCampoProtectora);
+
+function abrirModalUsuario(usuario = null) {
+    if (!modalUsuario) return;
+
+    const esEdicion = Boolean(usuario);
+    document.getElementById('modalUsuarioTitulo').textContent = esEdicion ? 'Editar usuario' : 'Nuevo usuario';
+    document.getElementById('u_id').value       = usuario?.id_usuario ?? '';
+    document.getElementById('u_nombre').value   = usuario?.nombre_usuario ?? '';
+    document.getElementById('u_email').value    = usuario?.email ?? '';
+    document.getElementById('u_password').value = '';
+    document.getElementById('u_tipo').value     = usuario?.tipo_usuario ?? estado.rolPorDefecto;
+    document.getElementById('u_protectora').value = usuario?.id_protectora ?? '';
+
+    // En alta, sin contraseña se genera una temporal; en edición se deja en blanco
+    // para no modificar la existente.
+    document.getElementById('u_passHint').textContent = esEdicion
+        ? '(déjalo en blanco para mantener la actual)'
+        : '(mínimo 8 caracteres; en blanco genera una temporal)';
+
+    ocultarErrorModal();
+    sincronizarCampoProtectora();
+    modalUsuario.showModal();
+    document.getElementById('u_nombre').focus();
+}
+
+function cerrarModalUsuario() {
+    modalUsuario?.close();
+}
+
+function mostrarErrorModal(mensaje) {
+    const el = document.getElementById('modalError');
+    if (!el) return;
+    el.textContent = mensaje;
+    el.hidden = false;
+}
+
+function ocultarErrorModal() {
+    const el = document.getElementById('modalError');
+    if (el) { el.hidden = true; el.textContent = ''; }
+}
+
+document.getElementById('btnNuevoUsuario')?.addEventListener('click', () => abrirModalUsuario());
+document.getElementById('btnCerrarModal')?.addEventListener('click', cerrarModalUsuario);
+document.getElementById('btnCancelarModal')?.addEventListener('click', cerrarModalUsuario);
+
+document.getElementById('formUsuario')?.addEventListener('submit', async e => {
+    e.preventDefault();
+    ocultarErrorModal();
+
+    const id       = document.getElementById('u_id').value;
+    const nombre   = document.getElementById('u_nombre').value.trim();
+    const email    = document.getElementById('u_email').value.trim();
+    const password = document.getElementById('u_password').value;
+    const tipo     = document.getElementById('u_tipo').value;
+    const protectora = document.getElementById('u_protectora').value;
+
+    if (!nombre || !email) return mostrarErrorModal('Nombre y correo son obligatorios');
+
+    const definicion = estado.roles.find(r => r.valor === tipo);
+    if (definicion?.requiereProtectora && !protectora)
+        return mostrarErrorModal(`El rol "${definicion.etiqueta}" necesita una protectora asignada`);
+
+    // Solo se envían los campos informados: el backend conserva el resto.
+    const cuerpo = { nombre, email, tipo, id_protectora: protectora || null };
+    if (password) cuerpo.password = password;
+
+    const boton = document.getElementById('btnGuardarUsuario');
+    const textoOriginal = boton.innerHTML;
+    boton.disabled = true;
+    boton.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Guardando...';
+
+    try {
+        const { ok, data } = await peticion(
+            id ? `/api/usuarios?id=${encodeURIComponent(id)}` : '/api/usuarios',
+            { method: id ? 'PATCH' : 'POST', body: JSON.stringify(cuerpo) }
+        );
+
+        if (!ok) return mostrarErrorModal(data?.error || 'No se pudo guardar el usuario');
+
+        cerrarModalUsuario();
+        await cargarUsuarios();
+
+        if (data?.passwordTemporal) {
+            await Swal.fire({
+                title: 'Usuario creado',
+                html: `Contraseña temporal (se muestra una sola vez):<br><code>${esc(data.passwordTemporal)}</code>`,
+                icon: 'success',
+            });
+        } else {
+            toast(id ? '¡Usuario actualizado!' : '¡Usuario creado!');
+        }
+    } catch (err) {
+        mostrarErrorModal('Error de red: ' + err.message);
+    } finally {
+        boton.disabled = false;
+        boton.innerHTML = textoOriginal;
+    }
+});
+
+// ==========================================
+// ANIMALES
+// ==========================================
 async function cargarAnimales() {
     try {
-        const res  = await fetch('/api/animales');
-        const data = await res.json();
+        const { ok, data } = await peticion('/api/animales');
+        if (!ok) return;
+
+        const animales = Array.isArray(data) ? data : [];
         const lista = document.getElementById('listaAnimales');
-        if (lista) {
-            lista.innerHTML = data.length
-                ? data.map(a => `
-                    <li class="item-lista">
-                        <span>
-                            <i class="fa-solid fa-paw" style="color:#4361ee;margin-right:8px"></i>
-                            <b>${a.nombre_animal}</b>
-                            <span class="badge badge-${a.estado === 'Disponible' ? 'disponible' : 'adoptado'}">${a.estado}</span>
-                        </span>
-                        <div class="btn-group">
-                            <button onclick="editar('animales', ${a.id_animal}, '${a.nombre_animal.replace(/'/g, "\\'")}')" class="btn-edit" title="Editar">
-                                <i class="fa-solid fa-pen"></i>
-                            </button>
-                            <button onclick="eliminar('animales', ${a.id_animal})" class="btn-del" title="Eliminar">
-                                <i class="fa-solid fa-trash-can"></i>
-                            </button>
-                        </div>
-                    </li>`).join('')
-                : '<li class="empty-state"><i class="fa-solid fa-inbox"></i> Sin registros</li>';
-        }
-    } catch (e) { console.error('[cargarAnimales]', e.message); }
+        if (!lista) return;
+
+        lista.innerHTML = animales.length
+            ? animales.map(a => `
+                <li class="item-lista">
+                    <span>
+                        <i class="fa-solid fa-paw" style="color:#4361ee;margin-right:8px"></i>
+                        <b>${esc(a.nombre_animal)}</b>
+                        <span class="badge badge-${a.estado === 'Disponible' ? 'disponible' : 'adoptado'}">${esc(a.estado)}</span>
+                    </span>
+                    <div class="btn-group">
+                        <button type="button" class="btn-edit" title="Editar"
+                                data-accion="editar" data-entidad="animales"
+                                data-id="${a.id_animal}" data-nombre="${esc(a.nombre_animal)}">
+                            <i class="fa-solid fa-pen"></i>
+                        </button>
+                        <button type="button" class="btn-del" title="Eliminar"
+                                data-accion="eliminar" data-entidad="animales" data-id="${a.id_animal}">
+                            <i class="fa-solid fa-trash-can"></i>
+                        </button>
+                    </div>
+                </li>`).join('')
+            : '<li class="empty-state"><i class="fa-solid fa-inbox"></i> Sin registros</li>';
+    } catch (e) {
+        console.error('[cargarAnimales]', e.message);
+    }
 }
 
 // ==========================================
-// EDITAR (PATCH)
+// ACCIONES DELEGADAS (editar / eliminar)
 // ==========================================
-async function editar(entidad, id, nombreActual) {
-    const etiquetas = { animales: 'animal', protectoras: 'protectora', usuarios: 'usuario' };
+document.addEventListener('click', async e => {
+    const boton = e.target.closest('[data-accion]');
+    if (!boton) return;
+
+    const { accion, entidad, id, nombre } = boton.dataset;
+
+    if (accion === 'editar-usuario') {
+        const usuario = estado.usuarios.find(u => String(u.id_usuario) === String(id));
+        if (usuario) abrirModalUsuario(usuario);
+        return;
+    }
+    if (accion === 'editar')   return editarNombre(entidad, id, nombre);
+    if (accion === 'eliminar') return eliminar(entidad, id);
+});
+
+async function editarNombre(entidad, id, nombreActual) {
+    const etiquetas = { animales: 'animal', protectoras: 'protectora' };
 
     const { value: nuevoNombre } = await Swal.fire({
-        title: 'Editar ' + etiquetas[entidad],
-        input: 'text',
-        inputLabel: 'Nuevo nombre',
-        inputValue: nombreActual,
-        showCancelButton: true,
-        cancelButtonText: 'Cancelar',
-        confirmButtonText: 'Guardar cambios',
-        confirmButtonColor: '#4361ee',
-        inputValidator: v => !v.trim() ? 'El nombre no puede estar vacío' : null
+        title: 'Editar ' + (etiquetas[entidad] ?? entidad),
+        input: 'text', inputLabel: 'Nuevo nombre', inputValue: nombreActual,
+        showCancelButton: true, cancelButtonText: 'Cancelar',
+        confirmButtonText: 'Guardar cambios', confirmButtonColor: '#4361ee',
+        inputValidator: v => !v.trim() ? 'El nombre no puede estar vacío' : null,
     });
 
     if (!nuevoNombre || nuevoNombre.trim() === nombreActual) return;
 
     try {
-        const res = await fetch(`/api/${entidad}?id=${id}`, {
+        const { ok, data } = await peticion(`/api/${entidad}?id=${encodeURIComponent(id)}`, {
             method: 'PATCH',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ nombre: nuevoNombre.trim() })
+            body: JSON.stringify({ nombre: nuevoNombre.trim() }),
         });
 
-        if (res.ok) {
-            await cargarTodo();
-            Swal.fire({ title: '¡Actualizado!', icon: 'success', toast: true, position: 'top-end', timer: 2000, showConfirmButton: false });
-        } else {
-            const err = await res.json();
-            Swal.fire('Error', err.error || 'No se pudo actualizar', 'error');
-        }
+        if (!ok) return Swal.fire('Error', data?.error || 'No se pudo actualizar', 'error');
+
+        await recargarEntidad(entidad);
+        toast('¡Actualizado!');
     } catch (e) {
         Swal.fire('Error de red', e.message, 'error');
     }
 }
 
-// ==========================================
-// ELIMINAR Y FORMULARIOS (RESTO DEL CÓDIGO)
-// ==========================================
 async function eliminar(entidad, id) {
-    const result = await Swal.fire({
-        title: '¿Eliminar registro?',
-        text: 'Esta acción no se puede deshacer',
-        icon: 'warning',
-        showCancelButton: true,
-        confirmButtonColor: '#ef233c',
-        cancelButtonColor: '#64748b',
-        cancelButtonText: 'Cancelar',
-        confirmButtonText: 'Sí, eliminar'
+    const confirmado = await Swal.fire({
+        title: '¿Eliminar registro?', text: 'Esta acción no se puede deshacer', icon: 'warning',
+        showCancelButton: true, confirmButtonColor: '#ef233c', cancelButtonColor: '#64748b',
+        cancelButtonText: 'Cancelar', confirmButtonText: 'Sí, eliminar',
     });
 
-    if (result.isConfirmed) {
-        try {
-            await fetch(`/api/${entidad}?id=${id}`, { method: 'DELETE' });
-            await cargarTodo();
-            Swal.fire({ title: 'Eliminado', icon: 'success', toast: true, position: 'top-end', timer: 2000, showConfirmButton: false });
-        } catch (e) {
-            Swal.fire('Error', 'No se pudo eliminar el registro', 'error');
-        }
+    if (!confirmado.isConfirmed) return;
+
+    try {
+        const { ok, data } = await peticion(`/api/${entidad}?id=${encodeURIComponent(id)}`, { method: 'DELETE' });
+        if (!ok) return Swal.fire('Error', data?.error || 'No se pudo eliminar el registro', 'error');
+
+        await recargarEntidad(entidad);
+        toast('Eliminado');
+    } catch (e) {
+        Swal.fire('Error', 'No se pudo eliminar el registro', 'error');
     }
 }
 
-document.querySelectorAll('form').forEach(form => {
-    form.addEventListener('submit', async (e) => {
-        e.preventDefault();
-        const formId = e.target.id;
-        let body = {}, url = '';
+/** Recarga solo lo afectado: evita refrescar listas que no han cambiado. */
+async function recargarEntidad(entidad) {
+    if (entidad === 'usuarios')    return cargarUsuarios();
+    if (entidad === 'animales')    return cargarAnimales();
+    if (entidad === 'protectoras') {
+        // Una protectora afecta además a los desplegables y a la columna de la tabla.
+        await cargarProtectoras();
+        return tienePermiso('usuarios:gestionar') ? cargarUsuarios() : undefined;
+    }
+}
 
-        if (formId === 'animalForm') {
-            url  = '/api/animales';
-            body = {
-                nombre:        document.getElementById('nombre').value,
-                especie:       document.getElementById('especie').value,
-                edad:          document.getElementById('edad').value || null,
-                id_protectora: document.getElementById('selectProtectora').value
-            };
-        } else if (formId === 'formProtectora') {
-            url  = '/api/protectoras';
-            body = {
-                nombre:    document.getElementById('p_nombre').value,
-                ubicacion: document.getElementById('p_ubicacion').value
-            };
-        } else if (formId === 'formUsuario') {
-            url  = '/api/usuarios';
-            body = {
-                nombre: document.getElementById('u_nombre').value,
-                email:  document.getElementById('u_email').value,
-                tipo:   document.getElementById('u_tipo').value
-            };
-        } else { return; }
+// ==========================================
+// FORMULARIOS DE ALTA (protectoras y animales)
+// ==========================================
+const ALTAS = {
+    formProtectora: {
+        url: '/api/protectoras',
+        entidad: 'protectoras',
+        cuerpo: () => ({
+            nombre:    document.getElementById('p_nombre').value,
+            ubicacion: document.getElementById('p_ubicacion').value,
+        }),
+    },
+    animalForm: {
+        url: '/api/animales',
+        entidad: 'animales',
+        cuerpo: () => ({
+            nombre:        document.getElementById('nombre').value,
+            especie:       document.getElementById('especie').value,
+            edad:          document.getElementById('edad').value || null,
+            id_protectora: document.getElementById('selectProtectora').value,
+        }),
+    },
+};
+
+Object.entries(ALTAS).forEach(([formId, config]) => {
+    document.getElementById(formId)?.addEventListener('submit', async e => {
+        e.preventDefault();
 
         const submitBtn = e.target.querySelector('button[type="submit"]');
         const origText  = submitBtn.innerHTML;
@@ -316,20 +613,16 @@ document.querySelectorAll('form').forEach(form => {
         submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
 
         try {
-            const res = await fetch(url, {
+            const { ok, data } = await peticion(config.url, {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(body)
+                body: JSON.stringify(config.cuerpo()),
             });
 
-            if (res.ok) {
-                e.target.reset();
-                await cargarTodo();
-                Swal.fire({ title: '¡Guardado!', icon: 'success', toast: true, position: 'top-end', timer: 2000, showConfirmButton: false });
-            } else {
-                const err = await res.json();
-                Swal.fire('Error', err.error || 'No se pudo guardar', 'error');
-            }
+            if (!ok) return Swal.fire('Error', data?.error || 'No se pudo guardar', 'error');
+
+            e.target.reset();
+            await recargarEntidad(config.entidad);
+            toast('¡Guardado!');
         } catch (err) {
             Swal.fire('Error de red', err.message, 'error');
         } finally {
@@ -338,3 +631,13 @@ document.querySelectorAll('form').forEach(form => {
         }
     });
 });
+
+// ==========================================
+// ARRANQUE
+// ==========================================
+const sesionGuardada = leerSesion();
+if (sesionGuardada) {
+    actualizarEstado({ sesion: sesionGuardada });
+    if (loginOverlay) loginOverlay.style.display = 'none';
+    iniciarPanel();
+}

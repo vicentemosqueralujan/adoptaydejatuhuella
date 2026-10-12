@@ -58,6 +58,14 @@ Vercel mapea automáticamente cada fichero de `api/` a una ruta. No hace falta `
 | `/api/protectoras` | `api/protectoras.js` | `GET`, `POST`, `PATCH`, `DELETE`, `OPTIONS` | CRUD de protectoras. |
 | `/api/usuarios` | `api/usuarios.js` | `GET`, `POST`, `PATCH`, `DELETE`, `OPTIONS` | CRUD de usuarios (nunca devuelve `password`). |
 | `/api/animales` | `api/animales.js` | `GET`, `POST`, `PATCH`, `DELETE`, `OPTIONS` | CRUD de animales. |
+| `/api/roles` | `api/roles.js` | `GET`, `OPTIONS` | Catálogo de roles que alimenta el panel. |
+
+Los módulos `api/_roles.js` y `api/_auth.js` empiezan por `_`, por lo que Vercel no los
+publica como rutas: son internos.
+
+**Autorización:** salvo el alta inicial, `/api/usuarios` exige el permiso
+`usuarios:gestionar`, identificado por la cabecera `X-Usuario-Id` (`401` sin identidad,
+`403` sin permisos). Consulta la limitación anotada en `api/_auth.js`.
 
 `PATCH` y `DELETE` identifican el registro por query string: `/api/animales?id=7`.
 Todos los handlers responden `405` ante métodos no contemplados y `500` con mensaje
@@ -71,11 +79,41 @@ Tres entidades normalizadas (los nombres de columna son los que usan los handler
 
 | Tabla | Clave primaria | Columnas |
 | :--- | :--- | :--- |
-| `usuario` | `id_usuario` | `nombre_usuario`, `email`, `password`, `tipo_usuario` |
+| `usuario` | `id_usuario` | `nombre_usuario`, `email`, `password`, `tipo_usuario`, `id_protectora` → `protectora` |
 | `protectora` | `id_protectora` | `nombre_protectora`, `ubicacion` |
 | `animal` | `id_animal` | `nombre_animal`, `especie_animal`, `edad`, `estado`, `id_protectora` → `protectora` |
 
 `animal.estado` se inicializa a `'Disponible'` en el alta.
+
+### Roles y migración
+
+`usuario.tipo_usuario` admite tres roles, definidos en `api/_roles.js` como única
+fuente de verdad (el desplegable del panel se construye desde `GET /api/roles`):
+
+| Rol | Protectora | Permisos |
+| :--- | :--- | :--- |
+| `Admin` | — | `usuarios:gestionar`, `protectoras:gestionar`, `animales:gestionar` |
+| `Protectora` | **obligatoria** | `animales:gestionar` |
+| `Adoptante` | — | `animales:consultar` |
+
+Migración necesaria en Neon para la asignación de protectora y el índice de login:
+
+```sql
+-- Vínculo opcional de un usuario con su protectora.
+ALTER TABLE usuario
+    ADD COLUMN IF NOT EXISTS id_protectora INTEGER
+    REFERENCES protectora (id_protectora) ON DELETE SET NULL;
+
+-- El login busca por email en cada intento: índice único para resolverlo en O(log n)
+-- y, de paso, impedir correos duplicados.
+CREATE UNIQUE INDEX IF NOT EXISTS idx_usuario_email ON usuario (email);
+
+-- Acelera el LEFT JOIN del listado de usuarios.
+CREATE INDEX IF NOT EXISTS idx_usuario_protectora ON usuario (id_protectora);
+```
+
+> Añadir un rol nuevo sólo requiere registrarlo en `api/_roles.js`: la validación del
+> backend, los permisos del login y el desplegable del panel se alimentan de esa lista.
 
 ---
 
@@ -147,40 +185,118 @@ curl -I http://localhost:3000/apple-touch-icon.png
 
 ---
 
-## 🔐 Acceso y credenciales
+## 🔐 Acceso y registro inicial
 
 El acceso al panel se valida contra la tabla `usuario` mediante `POST /api/login`.
 La sesión se guarda en `localStorage` bajo la clave `adminSession`.
 
-Para crear el usuario administrador de demostración, inserta un registro con la
-contraseña ya hasheada con bcrypt:
+### Lista blanca de registro
+
+`POST /api/usuarios` tiene dos modos:
+
+- **Arranque** — mientras no exista ningún `Admin` en la base de datos, el alta está
+  restringida a una **lista blanca de correos**; cualquier otro recibe `403 Forbidden`.
+- **Gestionado** — en cuanto hay un `Admin`, la lista blanca deja de aplicarse y el alta
+  la realiza un gestor autenticado, que puede crear cualquier correo con cualquier rol.
+  Una petición sin permisos recibe `401`/`403`.
+
+```js
+// api/usuarios.js
+const EMAILS_PERMITIDOS = (process.env.REGISTRO_EMAILS_PERMITIDOS || 'vicentemoslujan@gmail.com')
+    .split(',').map(e => e.trim().toLowerCase()).filter(Boolean);
+```
+
+La lista se amplía sin tocar código mediante la variable de entorno
+`REGISTRO_EMAILS_PERMITIDOS` (valores separados por comas), tanto en `.env` como en
+*Settings → Environment Variables* de Vercel:
+
+```env
+REGISTRO_EMAILS_PERMITIDOS="vicentemoslujan@gmail.com,otro.admin@ejemplo.com"
+```
+
+> La lista blanca sólo protege el arranque: una vez creado el administrador inicial, el
+> panel puede dar de alta cualquier correo sin tocar `REGISTRO_EMAILS_PERMITIDOS`.
+
+### Paso 1 — Vaciar la tabla de usuarios en Neon
+
+Ejecuta esto en el **SQL Editor de Neon** (o con `psql $POSTGRES_URL`) para partir de una
+tabla completamente limpia antes del primer registro:
+
+```sql
+-- Elimina todos los usuarios existentes.
+DELETE FROM usuario;
+
+-- Reinicia el contador de id_usuario para que el primer alta sea el id 1.
+ALTER SEQUENCE usuario_id_usuario_seq RESTART WITH 1;
+
+-- Comprobación: debe devolver 0.
+SELECT COUNT(*) FROM usuario;
+```
+
+> `TRUNCATE TABLE usuario RESTART IDENTITY CASCADE;` hace lo mismo en un solo paso, pero
+> `CASCADE` arrastraría las filas de las tablas relacionadas. Si sólo quieres limpiar
+> usuarios, usa la versión anterior.
+>
+> **Esta operación es irreversible.** Verifica que estás conectado a la base de datos de
+> desarrollo antes de lanzarla.
+
+### Paso 2 — Registrar el administrador inicial
+
+Con la tabla vacía, el alta se hace contra el endpoint. La contraseña viaja en texto
+plano por HTTPS y se almacena **siempre** hasheada con bcrypt (coste 10):
 
 ```bash
-node -e "console.log(require('bcryptjs').hashSync('TuPasswordDemo', 10))"
+curl -i -X POST http://localhost:3000/api/usuarios \
+  -H "Content-Type: application/json" \
+  -d '{"nombre":"Vicente Mosquera","email":"vicentemoslujan@gmail.com","password":"TuPasswordSegura","tipo":"Admin"}'
+# → HTTP/1.1 201 Created   {"ok":true}
+```
+
+### Paso 3 — Comprobar el login
+
+```bash
+curl -i -X POST http://localhost:3000/api/login \
+  -H "Content-Type: application/json" \
+  -d '{"email":"vicentemoslujan@gmail.com","password":"TuPasswordSegura"}'
+# → HTTP/1.1 200 OK   {"success":true,"user":{...}}
+```
+
+Como alternativa, el registro puede insertarse directamente en SQL con el hash ya
+generado:
+
+```bash
+node -e "console.log(require('bcryptjs').hashSync('TuPasswordSegura', 10))"
 ```
 
 ```sql
 INSERT INTO usuario (nombre_usuario, email, password, tipo_usuario)
-VALUES ('Admin Demo', 'admin@adoptaydejatuhuella.com', '<hash_generado>', 'Admin');
-```
-
-Alternativamente, puedes dar de alta usuarios desde el propio panel o vía API: el
-endpoint hashea la contraseña con bcrypt (coste 10) antes de guardarla. Si no se envía
-`password`, se genera una temporal aleatoria y se devuelve **una sola vez** en la
-respuesta:
-
-```bash
-curl -X POST http://localhost:3000/api/usuarios \
-  -H "Content-Type: application/json" \
-  -d '{"nombre":"Admin Demo","email":"admin@adoptaydejatuhuella.com","tipo":"Admin","password":"TuPasswordDemo"}'
+VALUES ('Vicente Mosquera', 'vicentemoslujan@gmail.com', '<hash_generado>', 'Admin');
 ```
 
 > **Política de contraseñas:** `/api/login` sólo acepta hashes bcrypt válidos
-> (prefijo `$2`, 60 caracteres). Cualquier registro con la contraseña en texto plano
-> es rechazado con `401` y queda registrado en el log del servidor. Las contraseñas
-> enviadas al alta requieren un mínimo de 8 caracteres.
+> (prefijo `$2`, 60 caracteres). Cualquier registro con la contraseña en texto plano es
+> rechazado con `401` y queda registrado en el log del servidor. Las contraseñas enviadas
+> al alta requieren un mínimo de 8 caracteres, los emails se normalizan a minúsculas y
+> `GET /api/usuarios` nunca devuelve la columna `password`.
 >
 > Nunca uses credenciales reales ni subas el fichero `.env` al repositorio.
+
+## 🖥️ Panel de administración
+
+La interfaz se adapta al rol del usuario autenticado. `POST /api/login` devuelve los
+permisos en la respuesta y el frontend muestra u oculta cada bloque marcado con
+`data-permiso`:
+
+| Bloque | Permiso exigido | Visible para |
+| :--- | :--- | :--- |
+| Gestión de usuarios (tabla + modal) | `usuarios:gestionar` | `Admin` |
+| Tarjeta de protectoras | `protectoras:gestionar` | `Admin` |
+| Tarjeta de animales | `animales:gestionar` | `Admin`, `Protectora` |
+
+El panel de usuarios incluye tabla con buscador, un `<dialog>` modal de alta y edición,
+un desplegable de rol alimentado por `GET /api/roles` y un selector de protectora que
+sólo aparece para los roles que la exigen. Dejar la contraseña en blanco genera una
+temporal que se muestra una única vez al crear, y mantiene la existente al editar.
 
 ## ☁️ Despliegue en Vercel
 
@@ -199,6 +315,9 @@ cada módulo de `api/` se compila como función serverless independiente.
 ```
 adoptaydejatuhuella/
 ├── api/
+│   ├── _auth.js             # Autorización por permisos (módulo interno)
+│   ├── _roles.js            # Catálogo de roles (módulo interno)
+│   ├── roles.js             # GET del catálogo de roles
 │   ├── animales.js          # CRUD de animales
 │   ├── login.js             # Autenticación
 │   ├── protectoras.js       # CRUD de protectoras
@@ -226,6 +345,9 @@ adoptaydejatuhuella/
 - [x] CRUD completo sobre las tres entidades.
 - [x] Assets PWA, manifiesto e instalabilidad (Entregable 4).
 - [x] Hasheo bcrypt en el alta de usuarios y validación estricta en el login.
+- [x] Registro inicial restringido por lista blanca de correos.
+- [x] Roles granulares, asignación de protectora y panel de administración por permisos.
+- [ ] Sustituir la cabecera `X-Usuario-Id` por un token firmado (JWT/cookie HttpOnly).
 - [ ] Sistema de filtros avanzado.
 - [ ] Pasarela de donaciones (fase futura).
 

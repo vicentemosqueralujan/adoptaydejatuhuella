@@ -1,6 +1,8 @@
 const { sql } = require('@vercel/postgres');
 const bcrypt  = require('bcryptjs');
 
+const { permisosDeRol, definicionDeRol } = require('./_roles.js');
+
 const BCRYPT_PREFIX = '$2';
 const CREDENCIALES_INVALIDAS = 'Credenciales incorrectas';
 // Hash descartable: se compara contra él cuando el usuario no existe o su hash no es
@@ -26,9 +28,22 @@ module.exports = async function handler(req, res) {
         if (!email || !password)
             return res.status(400).json({ success: false, message: 'Email y contraseña son obligatorios' });
 
+        // Una sola consulta indexada por email (ver idx_usuario_email en el README):
+        // trae en el mismo viaje el rol y la protectora asociada, de modo que el panel
+        // se puede renderizar sin una segunda petición. Se seleccionan únicamente las
+        // columnas necesarias y LIMIT 1 corta la búsqueda en la primera coincidencia.
         const { rows } = await sql`
-            SELECT id_usuario, nombre_usuario, tipo_usuario, password
-            FROM usuario WHERE email = ${String(email).trim().toLowerCase()} LIMIT 1
+            SELECT u.id_usuario,
+                   u.nombre_usuario,
+                   u.email,
+                   u.tipo_usuario,
+                   u.password,
+                   u.id_protectora,
+                   p.nombre_protectora
+            FROM usuario u
+            LEFT JOIN protectora p ON p.id_protectora = u.id_protectora
+            WHERE u.email = ${String(email).trim().toLowerCase()}
+            LIMIT 1
         `;
         const usuario = rows[0];
 
@@ -48,9 +63,20 @@ module.exports = async function handler(req, res) {
         if (!usuario || !hashUtilizable || !matches)
             return res.status(401).json({ success: false, message: CREDENCIALES_INVALIDAS });
 
+        // Metadatos de sesión listos para pintar el panel: el frontend no necesita
+        // deducir permisos ni volver a consultar la protectora asociada.
         return res.status(200).json({
             success: true,
-            user: { id: usuario.id_usuario, nombre: usuario.nombre_usuario, tipo: usuario.tipo_usuario }
+            user: {
+                id: usuario.id_usuario,
+                nombre: usuario.nombre_usuario,
+                email: usuario.email,
+                tipo: usuario.tipo_usuario,
+                etiquetaRol: definicionDeRol(usuario.tipo_usuario)?.etiqueta ?? usuario.tipo_usuario,
+                idProtectora: usuario.id_protectora ?? null,
+                nombreProtectora: usuario.nombre_protectora ?? null,
+                permisos: permisosDeRol(usuario.tipo_usuario),
+            }
         });
 
     } catch (e) {
