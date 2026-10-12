@@ -227,13 +227,20 @@ async function cargarCatalogoRoles() {
         select.value = estado.rolPorDefecto;
         sincronizarCampoProtectora();
 
-        // El registro público sólo ofrece los roles marcados con `autoRegistro`.
+        // El registro público sólo ofrece los roles marcados con `autoRegistro`:
+        // `Admin` queda excluido en origen, no por una lista repetida en el cliente.
         const selectRegistro = document.getElementById('regTipo');
         if (selectRegistro) {
-            selectRegistro.innerHTML = estado.roles
-                .filter(r => r.autoRegistro)
-                .map(r => `<option value="${esc(r.valor)}">${esc(r.etiqueta)}</option>`)
-                .join('');
+            const publicos = estado.roles.filter(r => r.autoRegistro);
+
+            selectRegistro.innerHTML = publicos.length
+                ? publicos.map(r => `<option value="${esc(r.valor)}">${esc(r.etiqueta)}</option>`).join('')
+                : '<option value="" disabled selected>No se pudieron cargar los roles</option>';
+
+            // Arranca en el rol por defecto del catálogo si es de registro público.
+            if (publicos.some(r => r.valor === estado.rolPorDefecto))
+                selectRegistro.value = estado.rolPorDefecto;
+
             sincronizarCampoProtectoraRegistro();
         }
     } catch (e) {

@@ -640,19 +640,47 @@ header {
     box-shadow: 0 1px 3px rgba(0,0,0,.08);
 }
 
+/* Mismas métricas que `.input-group input`: borde de 2px y padding 13px/16px.
+   `appearance: none` evita que el navegador dibuje su propio control encima
+   (el borde interior oscuro y la flecha nativa descuadraban la altura). */
 .login-body select {
+    display: block;
     width: 100%;
-    padding: 0.9rem 1rem;
-    border: 1.5px solid var(--border);
+    margin: 0;
+    padding: 13px 44px 13px 16px;        /* hueco a la derecha para la flecha propia */
+    border: 2px solid var(--border);
     border-radius: var(--radius-sm);
-    font-family: var(--font); font-size: 0.95rem;
-    background: #f8fafc; color: var(--text);
-    transition: border-color .2s, background .2s;
+    font-family: var(--font);
+    font-size: 0.95rem;
+    line-height: 1.25;
+    text-align: left;
+    background-color: #f8fafc;
+    color: var(--text);
+    transition: border-color 0.2s, box-shadow 0.2s, background-color 0.2s;
+
+    -webkit-appearance: none;
+    -moz-appearance: none;
+    appearance: none;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='%2364748b' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M4 6l4 4 4-4'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 16px center;
+    background-size: 16px 16px;
 }
+
 .login-body select:focus {
-    outline: none; border-color: var(--primary); background: #fff;
+    outline: none;
+    border-color: var(--primary);
+    background-color: #fff;
     box-shadow: 0 0 0 3px rgba(67, 97, 238, 0.12);
 }
+
+/* Firefox pinta un resaltado propio y un contorno punteado en el texto. */
+.login-body select:-moz-focusring { color: transparent; text-shadow: 0 0 0 var(--text); }
+.login-body select option { color: var(--text); background: #fff; }
+
+/* El `select` nativo ignora ::placeholder: la opción vacía se atenúa a mano. */
+.login-body select:invalid,
+.login-body select option[value=""] { color: #94a3b8; }
 
 .login-ayuda {
     min-height: 1.1em; margin-bottom: 0.5rem;

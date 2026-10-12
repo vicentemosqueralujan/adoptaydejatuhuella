@@ -29,8 +29,34 @@ function activarPestana(idBoton) {
     if (error) error.style.opacity = '0';
 }
 
+/**
+ * Rellena los desplegables del registro.
+ *
+ * Los catálogos de roles y protectoras se cargaban sólo desde `iniciarPanel()`,
+ * que no corre hasta después del login: en la pantalla de acceso el selector de rol
+ * quedaba vacío. Ambos endpoints son públicos, así que se piden por adelantado.
+ * La promesa se memoriza para no repetir la petición al alternar de pestaña.
+ */
+let promesaCatalogosRegistro = null;
+
+function prepararRegistroPublico() {
+    if (!promesaCatalogosRegistro) {
+        promesaCatalogosRegistro = Promise.all([cargarCatalogoRoles(), cargarProtectoras()])
+            .catch(e => {
+                // Si falla, se reintenta en la siguiente apertura de la pestaña.
+                promesaCatalogosRegistro = null;
+                console.error('[prepararRegistroPublico]', e.message);
+            });
+    }
+    return promesaCatalogosRegistro;
+}
+
 TABS.forEach(({ boton }) => {
-    document.getElementById(boton)?.addEventListener('click', () => activarPestana(boton));
+    document.getElementById(boton)?.addEventListener('click', () => {
+        activarPestana(boton);
+        // Al abrir «Crear cuenta» el desplegable ya debe tener sus opciones.
+        if (boton === 'tabRegistro') prepararRegistroPublico();
+    });
 });
 
 // ==========================================
@@ -331,4 +357,8 @@ if (sesionGuardada) {
     actualizarEstado({ sesion: sesionGuardada });
     if (loginOverlay) loginOverlay.style.display = 'none';
     iniciarPanel();
+} else {
+    // Sin sesión se muestra la pantalla de acceso: los desplegables del registro
+    // se preparan ya, para que la pestaña nunca aparezca con el selector vacío.
+    prepararRegistroPublico();
 }
