@@ -12,6 +12,7 @@ let estado = {
     usuarios: [],
     animales: [],
     catalogo: [],
+    favoritos: [],
     filtroUsuarios: '',
     filtroCatalogo: { q: '', especie: '', protectora: '' },
 };
@@ -42,9 +43,13 @@ function aplicarPermisos() {
     });
 
     const chip = document.getElementById('sesionChip');
-    if (!chip) return;
+    const botonCuenta = document.getElementById('btnMiCuenta');
 
     const sesion = estado.sesion;
+    // «Mis datos» es autoservicio: disponible para cualquier sesión, sea cual sea el rol.
+    if (botonCuenta) botonCuenta.hidden = !sesion;
+    if (!chip) return;
+
     chip.hidden = !sesion;
     if (!sesion) return;
 
@@ -199,6 +204,13 @@ async function iniciarPanel() {
 
     // El catálogo de roles y las protectoras alimentan los desplegables.
     await Promise.all([cargarCatalogoRoles(), cargarProtectoras()]);
+
+    // Los favoritos son locales: se leen antes de pintar para que los corazones
+    // salgan ya marcados en el primer render del catálogo.
+    if (tienePermiso('animales:consultar')) {
+        actualizarEstado({ favoritos: leerFavoritos() });
+        actualizarContadorFavoritos();
+    }
 
     // Cada rol carga sólo lo que puede ver: el adoptante no pide el listado de
     // gestión y la protectora no pide el de usuarios.
@@ -672,6 +684,85 @@ Object.entries(ALTAS).forEach(([formId, config]) => {
             submitBtn.innerHTML = origText;
         }
     });
+});
+
+// ==========================================
+// MIS DATOS (autoservicio de perfil)
+// ==========================================
+const modalPerfil = document.getElementById('modalPerfil');
+
+function errorPerfil(mensaje) {
+    const el = document.getElementById('modalPerfilError');
+    if (!el) return;
+    el.textContent = mensaje ?? '';
+    el.hidden = !mensaje;
+}
+
+document.getElementById('btnMiCuenta')?.addEventListener('click', () => {
+    if (!modalPerfil || !estado.sesion) return;
+
+    document.getElementById('pf_nombre').value   = estado.sesion.nombre ?? '';
+    document.getElementById('pf_email').value    = estado.sesion.email ?? '';
+    document.getElementById('pf_password').value = '';
+
+    // El rol se muestra, pero no se edita: sólo se cambia desde administración.
+    const rol = document.getElementById('pf_rol');
+    if (rol) {
+        const protectora = estado.sesion.nombreProtectora;
+        rol.textContent = `Rol: ${estado.sesion.etiquetaRol ?? estado.sesion.tipo}` +
+            (protectora ? ` · ${protectora}` : '');
+    }
+
+    errorPerfil(null);
+    modalPerfil.showModal();
+    document.getElementById('pf_nombre').focus();
+});
+
+document.getElementById('btnCerrarModalPerfil')?.addEventListener('click', () => modalPerfil?.close());
+document.getElementById('btnCancelarModalPerfil')?.addEventListener('click', () => modalPerfil?.close());
+
+document.getElementById('formPerfil')?.addEventListener('submit', async e => {
+    e.preventDefault();
+    errorPerfil(null);
+
+    const nombre   = document.getElementById('pf_nombre').value.trim();
+    const email    = document.getElementById('pf_email').value.trim();
+    const password = document.getElementById('pf_password').value;
+
+    if (!nombre || !email) return errorPerfil('Nombre y correo son obligatorios');
+    if (password && password.length < 8)
+        return errorPerfil('La contraseña debe tener al menos 8 caracteres');
+
+    const cuerpo = { nombre, email };
+    if (password) cuerpo.password = password;
+
+    const boton = document.getElementById('btnGuardarPerfil');
+    const textoOriginal = boton.innerHTML;
+    boton.disabled = true;
+    boton.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Guardando...';
+
+    try {
+        const { ok, data } = await peticion('/api/perfil', {
+            method: 'PATCH',
+            body: JSON.stringify(cuerpo),
+        });
+
+        if (!ok) return errorPerfil(data?.error || 'No se pudieron guardar los cambios');
+
+        // La sesión guardada se refresca con los datos nuevos, sin tocar rol ni permisos.
+        const sesion = { ...estado.sesion, nombre: data.usuario.nombre, email: data.usuario.email };
+        localStorage.setItem(CLAVE_SESION, JSON.stringify(sesion));
+        actualizarEstado({ sesion });
+        aplicarPermisos();
+
+        modalPerfil?.close();
+        toast('¡Datos actualizados!');
+    } catch (err) {
+        errorPerfil('Error de red: ' + err.message);
+    } finally {
+        boton.disabled = false;
+        boton.innerHTML = textoOriginal;
+    }
 });
 
 // El arranque vive al final de registro-catalogo.js, que se carga después:

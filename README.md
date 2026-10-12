@@ -59,9 +59,15 @@ Vercel mapea automáticamente cada fichero de `api/` a una ruta. No hace falta `
 | `/api/usuarios` | `api/usuarios.js` | `GET`, `POST`, `PATCH`, `DELETE`, `OPTIONS` | CRUD de usuarios (nunca devuelve `password`). |
 | `/api/animales` | `api/animales.js` | `GET`, `POST`, `PATCH`, `DELETE`, `OPTIONS` | Catálogo y gestión de animales, acotados por rol. |
 | `/api/roles` | `api/roles.js` | `GET`, `OPTIONS` | Catálogo de roles que alimenta el panel. |
+| `/api/perfil` | `api/perfil.js` | `GET`, `PATCH`, `OPTIONS` | Autoservicio: cada usuario edita sus propios datos. |
 
 Los módulos `api/_roles.js` y `api/_auth.js` empiezan por `_`, por lo que Vercel no los
 publica como rutas: son internos.
+
+`/api/perfil` sólo deja cambiar `nombre`, `email` y `password` del propio solicitante:
+el rol y la protectora asignada quedan fuera a propósito, para que nadie escale
+privilegios editando su ficha. El `WHERE` fija el id del solicitante, así que tampoco
+puede tocar la ficha de otra persona.
 
 **Autorización:** salvo el alta inicial, `/api/usuarios` exige el permiso
 `usuarios:gestionar`, identificado por la cabecera `X-Usuario-Id` (`401` sin identidad,
@@ -310,12 +316,19 @@ La interfaz se adapta al rol del usuario autenticado. `POST /api/login` devuelve
 permisos en la respuesta y el frontend muestra u oculta cada bloque marcado con
 `data-permiso`:
 
-| Bloque | Permiso exigido | Visible para |
-| :--- | :--- | :--- |
-| Gestión de usuarios (tabla + modal) | `usuarios:gestionar` | `Admin` |
-| Tarjeta de protectoras | `protectoras:gestionar` | `Admin` |
-| Gestión de animales (alta, edición, listado) | `animales:gestionar` | `Admin`, `Protectora` |
-| Catálogo de adopción (buscador y filtros) | `animales:consultar` | `Adoptante` |
+| Bloque | Permiso exigido | Admin | Protectora | Adoptante |
+| :--- | :--- | :---: | :---: | :---: |
+| Gestión de usuarios (tabla + modal) | `usuarios:gestionar` | ✅ | — | — |
+| Gestión de protectoras | `protectoras:gestionar` | ✅ | — | — |
+| Gestión de animales (alta, edición, listado) | `animales:gestionar` | ✅ | ✅ *(solo los suyos)* | — |
+| Catálogo de adopción + Mis favoritos | `animales:consultar` | — | — | ✅ |
+| Botón «Mis datos» | *sesión iniciada* | ✅ | ✅ | ✅ |
+
+> **Regla de ocultación.** `aplicarPermisos()` activa el atributo `hidden` sobre cada
+> bloque `[data-permiso]`. La regla del navegador `[hidden] { display: none }` pierde por
+> especificidad frente a cualquier clase que declare `display` —como `.card { display: flex }`—,
+> así que `styles.css` fuerza `[hidden] { display: none !important; }`. Sin esa regla los
+> bloques seguían viéndose aunque el permiso faltara.
 
 **Pantalla de acceso.** Dos pestañas: *Acceder* y *Crear cuenta*. El formulario de
 registro ofrece únicamente los roles marcados con `autoRegistro` en `api/_roles.js`
@@ -332,10 +345,43 @@ listado de los animales propios. El selector de protectora desaparece: el backen
 siempre la del usuario e ignora cualquier `id_protectora` recibido. Una protectora recibe
 `403` si intenta modificar un animal de otra.
 
+**Mis datos (todos los roles).** Botón en la cabecera que abre un modal para cambiar
+nombre, correo y contraseña contra `PATCH /api/perfil`. El rol se muestra pero no se edita.
+
+**Mis favoritos (`Adoptante`).** Cada tarjeta del catálogo lleva un botón de corazón. La
+lista se guarda en `localStorage` bajo la clave `favoritos:<idUsuario>`, de modo que dos
+cuentas en el mismo navegador no comparten favoritos. Es almacenamiento **local y
+temporal**: no viaja al servidor ni sobrevive a un cambio de navegador o a un borrado de
+datos del sitio. Un favorito que deja de estar disponible se contabiliza aparte en lugar
+de desaparecer sin explicación.
+
 **Catálogo de adopción (`Adoptante`).** Rejilla de tarjetas con icono por especie,
 buscador con retardo que consulta `?q=`, filtro de especie servido por `?especie=` y
 filtro de protectora aplicado en cliente. Sólo se muestran los animales `Disponible`:
 un adoptante no puede forzar otro estado por query string.
+
+### Centrado de modales
+
+Todos los `<dialog class="modal">` se centran con `position: fixed`, `inset: 0` y
+`margin: auto`, lo que los deja en el centro exacto de la ventana sea cual sea su altura:
+
+```css
+.modal {
+    position: fixed; inset: 0; margin: auto;
+    width: min(460px, 90vw); max-width: 90vw;
+    max-height: min(85vh, 85dvh);
+    overflow: hidden;
+}
+
+/* `display` sólo cuando está abierto: un `display` incondicional anularía la
+   regla `dialog:not([open]) { display: none }` y el modal se vería siempre. */
+.modal[open] { display: flex; flex-direction: column; }
+```
+
+El cuerpo (`.modal-body`) es la única zona que crece y scrollea (`flex: 1 1 auto;
+min-height: 0; overflow-y: auto`), con cabecera y pie fijos (`flex-shrink: 0`), de modo
+que los botones Cancelar y Guardar nunca se desbordan. Por debajo de 480 px el modal pasa
+a `90vw`, reduce el padding y reparte los botones del pie a lo ancho.
 
 ## ☁️ Despliegue en Vercel
 
@@ -357,6 +403,7 @@ adoptaydejatuhuella/
 │   ├── _auth.js             # Autorización por permisos (módulo interno)
 │   ├── _roles.js            # Catálogo de roles (módulo interno)
 │   ├── roles.js             # GET del catálogo de roles
+│   ├── perfil.js            # Autoservicio de datos personales
 │   ├── animales.js          # CRUD de animales
 │   ├── login.js             # Autenticación
 │   ├── protectoras.js       # CRUD de protectoras
@@ -365,7 +412,8 @@ adoptaydejatuhuella/
 │   ├── dev-server.js        # Servidor local equivalente a `vercel dev`
 │   └── generate-icons.py    # Generador reproducible de iconos PWA
 ├── index.html               # SPA: login overlay + dashboard
-├── styles.css               # Estilos del panel
+├── styles.css               # Estilos base y tokens de diseño
+├── styles-roles.css         # Pestañas de panel y favoritos
 ├── scripts.js               # Núcleo de cliente (sesión, permisos, login, usuarios)
 ├── registro-catalogo.js     # Registro público, catálogo y edición de animales
 ├── manifest.json            # Manifiesto PWA
@@ -389,6 +437,8 @@ adoptaydejatuhuella/
 - [x] Roles granulares, asignación de protectora y panel de administración por permisos.
 - [ ] Sustituir la cabecera `X-Usuario-Id` por un token firmado (JWT/cookie HttpOnly).
 - [x] Auto-registro público por roles y catálogo de adopción con buscador y filtros.
+- [x] Segregación estricta de vistas por rol, favoritos y autoservicio de perfil.
+- [ ] Persistir los favoritos en base de datos en lugar de `localStorage`.
 - [ ] Subida de fotografías de los animales.
 - [ ] Pasarela de donaciones (fase futura).
 

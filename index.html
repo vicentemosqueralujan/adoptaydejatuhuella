@@ -37,6 +37,7 @@
     <link rel="preconnect" href="https://cdnjs.cloudflare.com" crossorigin>
     <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
     <link rel="stylesheet" href="styles.css">
+    <link rel="stylesheet" href="styles-roles.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11" defer></script>
 </head>
@@ -114,6 +115,9 @@
                     <span class="badge" id="sesionRol"></span>
                 </span>
             </div>
+            <button type="button" id="btnMiCuenta" class="btn-logout" title="Mis datos" hidden>
+                <i class="fa-solid fa-user-pen"></i>
+            </button>
             <button type="button" id="btnLogout" class="btn-logout" title="Cerrar sesión">
                 <i class="fa-solid fa-right-from-bracket"></i>
             </button>
@@ -201,7 +205,7 @@
     </section>
 
 
-    <!-- ===== CATÁLOGO DE ADOPCIÓN (rol Adoptante) ===== -->
+    <!-- ===== ZONA DEL ADOPTANTE: catálogo y favoritos ===== -->
     <section class="admin-panel" id="panelCatalogo" data-permiso="animales:consultar" hidden
              aria-labelledby="panelCatalogoTitulo">
         <div class="panel-head">
@@ -209,7 +213,7 @@
                 <h2 id="panelCatalogoTitulo"><i class="fa-solid fa-heart"></i> Animales en adopción</h2>
                 <p class="panel-sub">Encuentra a tu futuro compañero entre los animales disponibles.</p>
             </div>
-            <div class="panel-tools">
+            <div class="panel-tools" id="herramientasCatalogo">
                 <div class="search-wrap">
                     <i class="fa-solid fa-magnifying-glass" aria-hidden="true"></i>
                     <input type="search" id="buscarCatalogo" placeholder="Buscar por nombre o especie"
@@ -224,10 +228,34 @@
             </div>
         </div>
 
+        <div class="panel-tabs" role="tablist">
+            <button type="button" class="panel-tab is-active" id="tabCatalogo"
+                    role="tab" aria-selected="true" aria-controls="vistaCatalogo">
+                <i class="fa-solid fa-paw"></i> Catálogo
+            </button>
+            <button type="button" class="panel-tab" id="tabFavoritos"
+                    role="tab" aria-selected="false" aria-controls="vistaFavoritos">
+                <i class="fa-solid fa-heart"></i> Mis favoritos
+                <span class="contador-pill" id="contadorFavoritos">0</span>
+            </button>
+        </div>
+
         <div class="catalogo-wrap">
-            <p class="catalogo-contador" id="catalogoContador" aria-live="polite"></p>
-            <div class="catalogo-grid" id="catalogoGrid">
-                <p class="catalogo-vacio"><i class="fa-solid fa-paw"></i> Cargando animales…</p>
+            <div id="vistaCatalogo" role="tabpanel" aria-labelledby="tabCatalogo">
+                <p class="catalogo-contador" id="catalogoContador" aria-live="polite"></p>
+                <div class="catalogo-grid" id="catalogoGrid">
+                    <p class="catalogo-vacio"><i class="fa-solid fa-paw"></i> Cargando animales…</p>
+                </div>
+            </div>
+
+            <div id="vistaFavoritos" role="tabpanel" aria-labelledby="tabFavoritos" hidden>
+                <p class="catalogo-contador" id="favoritosContador" aria-live="polite"></p>
+                <div class="catalogo-grid" id="favoritosGrid">
+                    <p class="catalogo-vacio">
+                        <i class="fa-regular fa-heart"></i>
+                        Todavía no has guardado ningún animal.
+                    </p>
+                </div>
             </div>
         </div>
     </section>
@@ -331,6 +359,46 @@
             <div class="modal-foot">
                 <button type="button" class="btn-secundario" id="btnCancelarModalAnimal">Cancelar</button>
                 <button type="submit" class="btn-add btn-compact" id="btnGuardarAnimal">
+                    <i class="fa-solid fa-floppy-disk"></i> Guardar
+                </button>
+            </div>
+        </form>
+    </dialog>
+
+
+    <!-- ===== MODAL MIS DATOS ===== -->
+    <dialog id="modalPerfil" class="modal" aria-labelledby="modalPerfilTitulo">
+        <form id="formPerfil" method="dialog" class="modal-form" novalidate>
+            <div class="modal-head">
+                <h3 id="modalPerfilTitulo">Mis datos</h3>
+                <button type="button" class="btn-cerrar" id="btnCerrarModalPerfil" aria-label="Cerrar">
+                    <i class="fa-solid fa-xmark"></i>
+                </button>
+            </div>
+
+            <div class="modal-body">
+                <label class="campo">
+                    <span>Nombre completo</span>
+                    <input type="text" id="pf_nombre" autocomplete="name" required>
+                </label>
+
+                <label class="campo">
+                    <span>Correo electrónico</span>
+                    <input type="email" id="pf_email" autocomplete="email" required>
+                </label>
+
+                <label class="campo">
+                    <span>Nueva contraseña <small>(déjalo en blanco para mantenerla)</small></span>
+                    <input type="password" id="pf_password" minlength="8" autocomplete="new-password">
+                </label>
+
+                <p class="campo-ayuda" id="pf_rol"></p>
+                <p class="modal-error" id="modalPerfilError" hidden role="alert"></p>
+            </div>
+
+            <div class="modal-foot">
+                <button type="button" class="btn-secundario" id="btnCancelarModalPerfil">Cancelar</button>
+                <button type="submit" class="btn-add btn-compact" id="btnGuardarPerfil">
                     <i class="fa-solid fa-floppy-disk"></i> Guardar
                 </button>
             </div>

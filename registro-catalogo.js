@@ -172,6 +172,8 @@ async function cargarCatalogo() {
         actualizarEstado({ catalogo: Array.isArray(data) ? data : [] });
         poblarFiltroEspecies();
         renderCatalogo();
+        renderFavoritos();
+        actualizarContadorFavoritos();
     } catch (e) {
         console.error('[cargarCatalogo]', e.message);
     }
@@ -212,32 +214,24 @@ function iconoDeEspecie(especie) {
     return ICONOS_ESPECIE[clave] ?? 'fa-paw';
 }
 
-function renderCatalogo() {
-    const grid = document.getElementById('catalogoGrid');
-    const contador = document.getElementById('catalogoContador');
-    if (!grid) return;
-
-    const animales = catalogoFiltrado();
-
-    if (contador) {
-        contador.textContent = animales.length === 1
-            ? '1 animal esperando una familia'
-            : `${animales.length} animales esperando una familia`;
-    }
-
-    if (!animales.length) {
-        grid.innerHTML = `
-            <p class="catalogo-vacio">
-                <i class="fa-solid fa-paw"></i>
-                No hay animales que coincidan con tu búsqueda.
-            </p>`;
-        return;
-    }
-
-    grid.innerHTML = animales.map(a => `
-        <article class="animal-card">
-            <div class="animal-figura" aria-hidden="true">
-                <i class="fa-solid ${iconoDeEspecie(a.especie_animal)}"></i>
+/**
+ * Dibuja una tarjeta de animal. `noDisponible` marca los favoritos que ya no
+ * aparecen en el catálogo (adoptados o retirados).
+ */
+function tarjetaAnimal(a, { noDisponible = false } = {}) {
+    const favorito = esFavorito(a.id_animal);
+    return `
+        <article class="animal-card${noDisponible ? ' no-disponible' : ''}">
+            <div class="animal-figura">
+                <i class="fa-solid ${iconoDeEspecie(a.especie_animal)}" aria-hidden="true"></i>
+                <button type="button"
+                        class="btn-favorito${favorito ? ' es-favorito' : ''}"
+                        data-accion="favorito" data-id="${a.id_animal}"
+                        aria-pressed="${favorito}"
+                        title="${favorito ? 'Quitar de favoritos' : 'Añadir a favoritos'}"
+                        aria-label="${favorito ? 'Quitar' : 'Añadir'} ${esc(a.nombre_animal)} de favoritos">
+                    <i class="${favorito ? 'fa-solid' : 'fa-regular'} fa-heart"></i>
+                </button>
             </div>
             <div class="animal-cuerpo">
                 <h3>${esc(a.nombre_animal)}</h3>
@@ -253,7 +247,28 @@ function renderCatalogo() {
                     ${a.nombre_protectora ? esc(a.nombre_protectora) : 'Protectora sin asignar'}
                 </p>
             </div>
-        </article>`).join('');
+        </article>`;
+}
+
+function renderCatalogo() {
+    const grid = document.getElementById('catalogoGrid');
+    const contador = document.getElementById('catalogoContador');
+    if (!grid) return;
+
+    const animales = catalogoFiltrado();
+
+    if (contador) {
+        contador.textContent = animales.length === 1
+            ? '1 animal esperando una familia'
+            : `${animales.length} animales esperando una familia`;
+    }
+
+    grid.innerHTML = animales.length
+        ? animales.map(a => tarjetaAnimal(a)).join('')
+        : `<p class="catalogo-vacio">
+               <i class="fa-solid fa-paw"></i>
+               No hay animales que coincidan con tu búsqueda.
+           </p>`;
 }
 
 /** Pequeño debounce para no lanzar una petición por cada tecla. */
@@ -280,6 +295,141 @@ document.getElementById('filtroEspecie')?.addEventListener('change', e => {
 document.getElementById('filtroProtectoraCat')?.addEventListener('change', e => {
     actualizarEstado({ filtroCatalogo: { ...estado.filtroCatalogo, protectora: e.target.value } });
     renderCatalogo();
+});
+
+// ==========================================
+// FAVORITOS DEL ADOPTANTE
+// ==========================================
+
+/**
+ * Los favoritos se guardan en `localStorage`, con una clave por usuario, para
+ * que dos cuentas en el mismo navegador no compartan lista. Es almacenamiento
+ * local y temporal: no viaja al servidor ni sobrevive a un cambio de navegador.
+ */
+function claveFavoritos() {
+    const id = estado.sesion?.id;
+    return id ? `favoritos:${id}` : null;
+}
+
+function leerFavoritos() {
+    const clave = claveFavoritos();
+    if (!clave) return [];
+    try {
+        const crudo = JSON.parse(localStorage.getItem(clave) ?? '[]');
+        return Array.isArray(crudo) ? crudo.map(Number).filter(Number.isInteger) : [];
+    } catch {
+        // Lista corrupta: se descarta en lugar de romper la vista.
+        localStorage.removeItem(clave);
+        return [];
+    }
+}
+
+function guardarFavoritos(ids) {
+    const clave = claveFavoritos();
+    if (!clave) return;
+    try {
+        localStorage.setItem(clave, JSON.stringify(ids));
+    } catch (e) {
+        // Cuota llena o almacenamiento bloqueado (modo privado): se avisa sin romper.
+        console.error('[guardarFavoritos]', e.message);
+        toast('No se pudieron guardar los favoritos', 'error');
+    }
+}
+
+function esFavorito(idAnimal) {
+    return estado.favoritos?.includes(Number(idAnimal)) ?? false;
+}
+
+/** Alterna un animal en la lista y repinta lo que dependa de ella. */
+function alternarFavorito(idAnimal) {
+    const id = Number(idAnimal);
+    const actuales = estado.favoritos ?? [];
+    const favoritos = actuales.includes(id)
+        ? actuales.filter(x => x !== id)
+        : [...actuales, id];
+
+    actualizarEstado({ favoritos });
+    guardarFavoritos(favoritos);
+
+    renderCatalogo();
+    renderFavoritos();
+    actualizarContadorFavoritos();
+}
+
+function actualizarContadorFavoritos() {
+    const pill = document.getElementById('contadorFavoritos');
+    if (pill) pill.textContent = String(estado.favoritos?.length ?? 0);
+}
+
+function renderFavoritos() {
+    const grid = document.getElementById('favoritosGrid');
+    const contador = document.getElementById('favoritosContador');
+    if (!grid) return;
+
+    const ids = estado.favoritos ?? [];
+    const disponibles = estado.catalogo ?? [];
+
+    // Un favorito puede haber sido adoptado o retirado: se indica en vez de
+    // desaparecer sin explicación.
+    const encontrados = ids
+        .map(id => disponibles.find(a => Number(a.id_animal) === id))
+        .filter(Boolean);
+    const perdidos = ids.length - encontrados.length;
+
+    if (contador) {
+        contador.textContent = ids.length
+            ? `${ids.length} guardado${ids.length === 1 ? '' : 's'}` +
+              (perdidos ? ` · ${perdidos} ya no está${perdidos === 1 ? '' : 'n'} disponible${perdidos === 1 ? '' : 's'}` : '')
+            : '';
+    }
+
+    grid.innerHTML = encontrados.length
+        ? encontrados.map(a => tarjetaAnimal(a)).join('')
+        : `<p class="catalogo-vacio">
+               <i class="fa-regular fa-heart"></i>
+               ${ids.length
+                   ? 'Los animales que guardaste ya no están disponibles.'
+                   : 'Todavía no has guardado ningún animal. Pulsa el corazón en el catálogo.'}
+           </p>`;
+}
+
+// El corazón se gestiona por delegación: las tarjetas se repintan constantemente.
+document.addEventListener('click', e => {
+    const boton = e.target.closest('[data-accion="favorito"]');
+    if (!boton) return;
+    e.preventDefault();
+    alternarFavorito(boton.dataset.id);
+});
+
+// ==========================================
+// PESTAÑAS DEL PANEL DEL ADOPTANTE
+// ==========================================
+const TABS_PANEL = [
+    { boton: 'tabCatalogo',  panel: 'vistaCatalogo'  },
+    { boton: 'tabFavoritos', panel: 'vistaFavoritos' },
+];
+
+function activarVista(idBoton) {
+    TABS_PANEL.forEach(({ boton, panel }) => {
+        const activo = boton === idBoton;
+        const elBoton = document.getElementById(boton);
+        const elPanel = document.getElementById(panel);
+        if (!elBoton || !elPanel) return;
+
+        elBoton.classList.toggle('is-active', activo);
+        elBoton.setAttribute('aria-selected', String(activo));
+        elPanel.hidden = !activo;
+    });
+
+    // Los filtros sólo aplican al catálogo, no a la lista de favoritos.
+    const herramientas = document.getElementById('herramientasCatalogo');
+    if (herramientas) herramientas.hidden = idBoton !== 'tabCatalogo';
+
+    if (idBoton === 'tabFavoritos') renderFavoritos();
+}
+
+TABS_PANEL.forEach(({ boton }) => {
+    document.getElementById(boton)?.addEventListener('click', () => activarVista(boton));
 });
 
 // ==========================================
