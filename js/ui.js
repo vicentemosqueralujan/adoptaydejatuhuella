@@ -51,6 +51,36 @@ function toast(mensaje, tipo = 'exito') {
     }, DURACION_TOAST);
 }
 
+// --------------------------------------------------- Gestor de modales ---
+//
+// Política de exclusividad (DESIGN_SYSTEM.md §5.4): sólo un modal abierto a la
+// vez. Toda apertura pasa por `abrirModal()`, que cierra antes cualquier otro
+// `<dialog>` abierto; así no se apilan modales ni quedan fondos fantasma.
+
+/** Cierra todos los modales abiertos salvo `excepto`. */
+function cerrarModales(excepto = null) {
+    document.querySelectorAll('dialog[open], .modal[open]').forEach(dlg => {
+        if (dlg === excepto) return;
+        if (typeof dlg.close === 'function') dlg.close();
+        dlg.removeAttribute('open'); // por si se abrió con el atributo y no con showModal()
+    });
+}
+
+/** Cierra todos los modales sin excepción (alias público del gestor). */
+window.cerrarTodosLosModales = () => cerrarModales();
+
+/** Abre `dlg` como único modal activo. Si ya está abierto, no hace nada más. */
+function abrirModal(dlg) {
+    if (!dlg) return;
+    cerrarModales(dlg);
+    if (!dlg.open) dlg.showModal();
+}
+
+/** Cierra `dlg` si está abierto; el estado visible es el atributo nativo `open`. */
+function cerrarModal(dlg) {
+    if (dlg?.open) dlg.close();
+}
+
 // ------------------------------------------------------ Diálogo genérico ---
 
 /**
@@ -107,7 +137,7 @@ function abrirDialogo({ titulo, cuerpo, acciones, ancho = '420px', alCrear }) {
         dlg.addEventListener('close', () => { terminar(null); dlg.remove(); });
 
         document.body.appendChild(dlg);
-        dlg.showModal();
+        abrirModal(dlg);
         alCrear?.(dlg);
         dlg.querySelector('[data-foco]')?.focus();
     });

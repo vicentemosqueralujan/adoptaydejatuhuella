@@ -310,12 +310,17 @@
     border-bottom: 1px solid var(--border);
     flex: none;
 }
+/* Pestañas a partes iguales: lectura simétrica bajo la cabecera centrada. */
+.acceso-tabs .panel-tab { flex: 1; justify-content: center; }
 
 /* El formulario es la zona desplazable: con «Crear cuenta» abierto en una
    pantalla baja, ni el botón ni la nota del pie se salen del modal. */
+/* `.modal-acceso > .acceso-cuerpo` (0,2,0) garantiza la caja del formulario aunque
+   alguna regla genérica de `.modal > form` intente disolverla. */
+.modal-acceso > .acceso-cuerpo,
 .acceso-cuerpo {
     display: flex; flex-direction: column; gap: var(--space-4);
-    padding: 1.25rem;
+    padding: var(--space-5) var(--space-5) var(--space-4);
     overflow-y: auto;
     flex: 1 1 auto;
     min-height: 0;
@@ -326,7 +331,9 @@
 .acceso-cuerpo .btn-bloque { margin-top: var(--space-1); margin-bottom: var(--space-1); }
 
 .acceso-pie {
-    padding: var(--space-3) 1.25rem var(--space-5);
+    padding: var(--space-3) var(--space-5) var(--space-4);
+    border-top: 1px solid var(--border);
+    background: var(--bg-main);
     font-size: var(--text-xs); color: var(--text-muted); text-align: center;
     flex: none;
 }

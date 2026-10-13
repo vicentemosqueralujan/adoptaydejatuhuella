@@ -163,12 +163,12 @@ function abrirAcceso(motivo = 'general') {
     mostrarError('loginError', null);
     mostrarError('registroError', null);
 
-    modalAcceso.showModal();
+    abrirModal(modalAcceso);
     document.getElementById(pestana === 'tabRegistro' ? 'regNombre' : 'loginEmail').focus();
 }
 
 function cerrarAcceso() {
-    modalAcceso?.close();
+    cerrarModal(modalAcceso);
 }
 
 document.getElementById('btnAcceder')?.addEventListener('click', () => abrirAcceso('general'));
@@ -537,13 +537,13 @@ function abrirModalUsuario(usuario = null) {
 
     mostrarError('modalError', null);
     sincronizarCampoProtectora();
-    modalUsuario.showModal();
+    abrirModal(modalUsuario);
     document.getElementById('u_nombre').focus();
 }
 
 document.getElementById('btnNuevoUsuario')?.addEventListener('click', () => abrirModalUsuario());
-document.getElementById('btnCerrarModal')?.addEventListener('click', () => modalUsuario?.close());
-document.getElementById('btnCancelarModal')?.addEventListener('click', () => modalUsuario?.close());
+document.getElementById('btnCerrarModal')?.addEventListener('click', () => cerrarModal(modalUsuario));
+document.getElementById('btnCancelarModal')?.addEventListener('click', () => cerrarModal(modalUsuario));
 
 document.getElementById('formUsuario')?.addEventListener('submit', async e => {
     e.preventDefault();
@@ -576,7 +576,7 @@ document.getElementById('formUsuario')?.addEventListener('submit', async e => {
 
         if (!ok) return mostrarError('modalError', data?.error || 'No se pudo guardar el usuario');
 
-        modalUsuario?.close();
+        cerrarModal(modalUsuario);
         await cargarUsuarios();
 
         if (data?.passwordTemporal) {
@@ -730,12 +730,12 @@ document.getElementById('btnMiCuenta')?.addEventListener('click', () => {
     }
 
     mostrarError('modalPerfilError', null);
-    modalPerfil.showModal();
+    abrirModal(modalPerfil);
     document.getElementById('pf_nombre').focus();
 });
 
-document.getElementById('btnCerrarModalPerfil')?.addEventListener('click', () => modalPerfil?.close());
-document.getElementById('btnCancelarModalPerfil')?.addEventListener('click', () => modalPerfil?.close());
+document.getElementById('btnCerrarModalPerfil')?.addEventListener('click', () => cerrarModal(modalPerfil));
+document.getElementById('btnCancelarModalPerfil')?.addEventListener('click', () => cerrarModal(modalPerfil));
 
 document.getElementById('formPerfil')?.addEventListener('submit', async e => {
     e.preventDefault();
@@ -768,7 +768,7 @@ document.getElementById('formPerfil')?.addEventListener('submit', async e => {
         actualizarEstado({ sesion });
         aplicarPermisos();
 
-        modalPerfil?.close();
+        cerrarModal(modalPerfil);
         toast('Datos actualizados');
     } catch (err) {
         mostrarError('modalPerfilError', 'Error de red: ' + err.message);
@@ -783,7 +783,7 @@ document.getElementById('formPerfil')?.addEventListener('submit', async e => {
 
 // Clic en el backdrop: el objetivo del evento es el propio <dialog>.
 document.querySelectorAll('dialog.modal').forEach(dlg => {
-    dlg.addEventListener('click', e => { if (e.target === dlg) dlg.close(); });
+    dlg.addEventListener('click', e => { if (e.target === dlg) cerrarModal(dlg); });
 });
 
 // El arranque vive al final de registro-catalogo.js, que se carga después:

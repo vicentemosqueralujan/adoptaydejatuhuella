@@ -434,6 +434,20 @@ servida por `js/icons.js`. No quedan dependencias de UI por CDN: Font Awesome y
 SweetAlert2 se han sustituido por el registro de iconos propio y por los diálogos de
 `js/ui.js`.
 
+**Ciclo de vida de los modales.** Todos los modales están cerrados al cargar la
+página y sólo se abren por una acción explícita del usuario (botón o tarjeta), a
+través de `abrirModal()` en `js/ui.js`, que antes cierra cualquier otro
+(`cerrarTodosLosModales()`). Si tras actualizar el código ves modales abiertos al
+cargar, fuerza la recarga (Ctrl+Shift+R): es CSS antiguo en caché.
+
+**Formularios en modales.** Sólo `.modal > .modal-form` usa `display: contents`; el
+modal de acceso, cuyos `<form class="acceso-cuerpo">` son el cuerpo desplazable,
+mantiene su padding (`--space-5` lateral, igual que cabecera y pestañas) y scroll para que
+«Entrar» / «Crear mi cuenta» y el pie se vean enteros.
+
+**Versionado de estáticos.** `index.html` carga CSS y JS con `?v=AAAAMMDD`. Súbelo al
+modificar estilos o scripts para que ningún navegador use una copia en caché.
+
 **Centrado de modales.** Todos los `<dialog class="modal">` se centran con
 `margin: auto; inset: 0` y radio de 12 px, tal como fija la guía:
 
@@ -442,23 +456,33 @@ SweetAlert2 se han sustituido por el registro de iconos propio y por los diálog
     margin: auto; inset: 0;
     border: none; border-radius: 12px;
     max-width: min(560px, calc(100vw - 2rem));
-    max-height: min(90vh, 90dvh);
+    max-height: min(85vh, 85dvh);
     padding: 0;
-    display: flex; flex-direction: column;
     overflow: hidden;   /* el recorte vive aquí; el scroll, en el cuerpo */
 }
 
 /* `display` sólo cuando está abierto: un `display` incondicional anularía la
    regla `dialog:not([open]) { display: none }` y el modal se vería siempre. */
 .modal[open] { display: flex; flex-direction: column; }
+.modal:not([open]) { display: none !important; }   /* red de seguridad */
 ```
 
 El cuerpo (`.modal-body`; `.acceso-cuerpo` en el modal de acceso) es la única zona que
-scrollea —`overflow-y: auto; flex: 1 1 auto; min-height: 0; padding: 1.25rem`—, con
+scrollea —`overflow-y: auto; flex: 1 1 auto; min-height: 0; padding: 1rem 1.25rem`—, con
 cabecera, pestañas y pie fijos en `flex: none`. Así los botones «Entrar», «Crear mi
 cuenta», Cancelar y Guardar se ven enteros, igual que la nota de pie del modal de
 acceso, sin recortes ni desbordes. Se cierran con `Esc`, con el botón de cerrar y con
 clic en el fondo. Por debajo de 480 px el pie reparte los botones a lo ancho.
+
+**Un único modal a la vez.** `js/ui.js` centraliza la gestión: `abrirModal(dlg)` cierra
+cualquier otro `<dialog>` abierto antes de mostrar el nuevo, y `cerrarModal(dlg)` atiende
+la «X», «Cancelar», el clic en el fondo y el cierre tras guardar. Ningún archivo llama a
+`showModal()` directamente, de modo que no se apilan modales ni quedan fondos fantasma.
+`cerrarModales()` barre `dialog[open]` y `.modal[open]` y retira cualquier atributo
+`open` residual; como sólo hay un `<dialog>` modal abierto, existe un único
+`::backdrop` y el resto de la página queda inerte.
+Las capas están unificadas en `styles.css`: fondo `--z-overlay: 1000`, modal
+`--z-modal: 1010`.
 
 **Navegación por breakpoint.** El botón de menú (`#btnMenu`) es exclusivo de móvil: en
 escritorio (`min-width: 769px`) se fuerza su `display: none !important` y la barra de

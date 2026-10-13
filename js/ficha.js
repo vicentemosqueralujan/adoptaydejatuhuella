@@ -277,10 +277,10 @@ function abrirFicha(animal) {
             </div>
         </div>`;
 
-    if (!modalFicha.open) modalFicha.showModal();
+    abrirModal(modalFicha);
 }
 
-document.getElementById('btnCerrarFicha')?.addEventListener('click', () => modalFicha?.close());
+document.getElementById('btnCerrarFicha')?.addEventListener('click', () => cerrarModal(modalFicha));
 
 // Cambio de fotografía principal dentro de la ficha.
 document.addEventListener('click', e => {
@@ -332,7 +332,7 @@ document.addEventListener('click', async e => {
 
     // Sin sesión, la solicitud abre el acceso en lugar de fallar en silencio.
     if (!haySesion()) {
-        modalFicha?.close();
+        cerrarModal(modalFicha);
         return abrirAcceso('adopcion');
     }
 

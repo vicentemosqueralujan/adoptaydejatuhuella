@@ -425,7 +425,7 @@ document.addEventListener('click', e => {
 
     // Guardar favoritos exige identificarse: se abre el acceso, no un error.
     if (!haySesion()) {
-        modalFicha?.close();
+        cerrarModal(modalFicha);
         return abrirAcceso('favorito');
     }
 
@@ -572,13 +572,13 @@ function abrirModalAnimal(animal = null) {
 
     mostrarError('modalAnimalError', null);
     configurarPanelAnimales();
-    modalAnimal.showModal();
+    abrirModal(modalAnimal);
     document.getElementById('a_nombre').focus();
 }
 
 document.getElementById('btnNuevoAnimal')?.addEventListener('click', () => abrirModalAnimal());
-document.getElementById('btnCerrarModalAnimal')?.addEventListener('click', () => modalAnimal?.close());
-document.getElementById('btnCancelarModalAnimal')?.addEventListener('click', () => modalAnimal?.close());
+document.getElementById('btnCerrarModalAnimal')?.addEventListener('click', () => cerrarModal(modalAnimal));
+document.getElementById('btnCancelarModalAnimal')?.addEventListener('click', () => cerrarModal(modalAnimal));
 
 /** Reúne el formulario completo: campos base más los cuatro bloques de la ficha. */
 function cuerpoAnimal() {
@@ -641,7 +641,7 @@ document.getElementById('formAnimal')?.addEventListener('submit', async e => {
 
         if (!ok) return mostrarError('modalAnimalError', data?.error || 'No se pudo guardar el animal');
 
-        modalAnimal?.close();
+        cerrarModal(modalAnimal);
         await recargarEntidad('animales');
         toast(id ? 'Animal actualizado' : 'Animal dado de alta');
     } catch (err) {

@@ -258,18 +258,76 @@ miniatura cambia la foto principal al instante.
     box-shadow: var(--shadow-lg);
     padding: 0;
     max-width: min(560px, calc(100vw - 2rem));
-    max-height: min(90vh, 90dvh);
-    display: flex;
-    flex-direction: column;
-    overflow: hidden;
+    max-height: min(85vh, 85dvh);
+    overflow: hidden;            /* sin `display` aquí (ver nota) */
 }
-.modal::backdrop { background: rgba(28, 25, 23, 0.4); }
+.modal[open]        { display: flex; flex-direction: column; }
+.modal:not([open])  { display: none !important; }  /* red de seguridad */
+.modal::backdrop    { background: rgba(28, 25, 23, 0.4); }
 ```
+
+> **Nota crítica.** Declarar `display` en `.modal` sobrescribe la regla del
+> navegador `dialog:not([open]) { display: none }`: los modales cerrados seguirían
+> pintados y se apilarían. El `display: flex` va **sólo** en `.modal[open]`.
+
+```text
+Backdrop único: sólo el `<dialog>` abierto con `showModal()` tiene `::backdrop`,
+y como sólo hay uno abierto, hay un único fondo oscuro que bloquea el fondo (inert).
+```
+
+#### Ciclo de vida: cerrados por defecto
+
+1. **Carga:** ningún `<dialog>` lleva el atributo `open` en `index.html` y
+   `.modal:not([open]) { display: none !important; }` garantiza que ninguno se pinta.
+2. **Apertura:** exclusivamente desde un manejador de evento del usuario (clic en
+   «Acceder», en una tarjeta, en «Mis datos», en «Nuevo usuario/animal», etc.).
+   Ningún script llama a `abrirModal()` en el ámbito global, en `DOMContentLoaded`
+   ni en `iniciarPanel()`.
+3. **Cierre:** «X», «Cancelar», `Esc`, clic en el fondo o tras guardar.
+
+#### Política de exclusividad: un único modal abierto
+
+Nunca hay dos modales visibles a la vez. Toda apertura pasa por el gestor de
+`js/ui.js`; está prohibido llamar a `showModal()` o `close()` directamente:
+
+| Función | Comportamiento |
+|---|---|
+| `abrirModal(dlg)` | Cierra cualquier otro `<dialog>` abierto y muestra `dlg`. Idempotente si ya está abierto. |
+| `cerrarModal(dlg)` | Cierra `dlg` si está abierto (botón «X», «Cancelar», clic en el fondo, tras guardar). |
+| `cerrarTodosLosModales()` | Alias global (`window`) de `cerrarModales()` sin excepción. |
+| `cerrarModales(excepto?)` | Cierra todos los modales abiertos (`dialog[open]`, `.modal[open]`) salvo el indicado y retira el atributo `open` residual. |
+
+El estado visible es el atributo nativo `open` del `<dialog>`; no hay clases de
+visibilidad que limpiar. `Esc` cierra el modal activo de forma nativa. Los diálogos
+generados (`aviso`, `confirmar`, `pedirTexto`) siguen la misma política: sustituyen al
+modal que hubiera abierto, nunca se apilan sobre él.
+
+#### Orden de capas
+
+| Capa | Token | Valor |
+|---|---|---|
+| Fondo oscuro (`.modal::backdrop`) | `--z-overlay` | `1000` |
+| Modal (`.modal`) | `--z-modal` | `1010` |
+
+Ningún otro componente usa valores en ese rango (cabecera `40`, menú móvil `50`,
+toasts `100`). El `<dialog>` abierto con `showModal()` vive además en la *top layer*
+del navegador, así que estos valores actúan como red de seguridad coherente.
 
 - Centrado real mediante `margin: auto; inset: 0` sobre `<dialog>` nativo.
 - Estructura fija: `.modal-head` (título + cerrar) · `.modal-body` (desplazable)
   · `.modal-foot` (acciones alineadas a la derecha, secundaria primero).
 - Cabecera y pie quedan fijos; sólo el cuerpo hace scroll.
+
+#### Formularios dentro de un modal
+
+- `<form class="modal-form">` **envuelve** head/body/foot → `display: contents`.
+- Un `<form>` que **es** el cuerpo desplazable (`.acceso-cuerpo`) conserva su caja.
+  Nunca uses el selector genérico `.modal > form`: anula padding y scroll del cuerpo
+  y recorta el botón final (bug corregido en el modal de acceso).
+- Márgenes del modal de acceso: cuerpo `padding: var(--space-5) var(--space-5) var(--space-4)`,
+  pie con `border-top` y `--bg-main`, mismo eje horizontal (`--space-5`) que cabecera y pestañas.
+- **Caché:** al cambiar CSS/JS, sube el sufijo `?v=AAAAMMDD` de sus `<link>`/`<script>`
+  en `index.html`; si no, el navegador puede seguir pintando la versión antigua.
 
 #### Contrato de scroll en modales
 
@@ -278,8 +336,8 @@ El contenedor es la caja que limita la altura y **nunca** scrollea; el cuerpo es
 
 | Capa | Reglas obligatorias |
 |---|---|
-| Contenedor (`.modal`) | `max-height: min(90vh, 90dvh); display: flex; flex-direction: column; overflow: hidden;` |
-| Cuerpo (`.modal-body`, `.acceso-cuerpo`) | `overflow-y: auto; flex: 1 1 auto; min-height: 0; padding: 1.25rem;` |
+| Contenedor (`.modal`, incl. `#modalAcceso`) | `max-height: min(85vh, 85dvh); display: flex; flex-direction: column; overflow: hidden;` (`display` sólo en `[open]`) |
+| Cuerpo (`.modal-body`, `.acceso-cuerpo`) | `overflow-y: auto; flex: 1 1 auto; min-height: 0; padding: 1rem 1.25rem;` |
 | Cabecera, pestañas y pie | `flex: none` y padding lateral igual al del cuerpo (`1.25rem`) |
 
 `min-height: 0` es imprescindible: sin él, un hijo flex no baja de su altura de
@@ -355,8 +413,7 @@ Por debajo de 768 px los accesos de la cabecera se repliegan tras ese botón
 
 ### Seguridad de área en iOS
 
-Los modales usan `max-height: min(90vh, 90dvh)` (y `min(85vh, 85dvh)` por debajo de
-480 px): en iPhone, `vh` ignora la barra flotante de Safari y `dvh` la descuenta, de
+Los modales usan `max-height: min(85vh, 85dvh)` en todos los tamaños: en iPhone, `vh` ignora la barra flotante de Safari y `dvh` la descuenta, de
 modo que el menor de los dos impide que el pie del modal quede recortado. El pie añade además
 `padding-bottom: calc(var(--space-4) + env(safe-area-inset-bottom, 0px))` para no
 quedar bajo el indicador de inicio.
@@ -376,6 +433,8 @@ Objetivo táctil mínimo de 44×44 px en todos los breakpoints.
 - [ ] El contenedor del modal recorta (`overflow: hidden`) y sólo el cuerpo scrollea
       (`overflow-y: auto; flex: 1 1 auto; min-height: 0`).
 - [ ] El botón de menú no aparece en escritorio (≥ 769 px).
+- [ ] Los modales se abren con `abrirModal()` y se cierran con `cerrarModal()`; nunca
+      hay dos abiertos a la vez.
 - [ ] Contraste de texto AA comprobado.
 - [ ] Probado a 360, 768, 1024 y 1440 px sin desbordes horizontales.
 - [ ] `prefers-reduced-motion` desactiva las animaciones.

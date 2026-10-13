@@ -111,6 +111,9 @@ function servirEstatico(req, res, rutaUrl) {
         'Content-Type': tipoMime(file),
         'Content-Length': body.length,
         'X-Content-Type-Options': 'nosniff',
+        // Sin esto el navegador reutiliza CSS/JS antiguos de su caché heurística
+        // y los cambios (p. ej. la regla que oculta los modales) no se ven al recargar.
+        'Cache-Control': 'no-cache',
     });
     res.end(req.method === 'HEAD' ? undefined : body);
 }
