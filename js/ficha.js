@@ -213,11 +213,37 @@ function bloqueCompatible(a) {
     return chips ? bloqueFicha('Compatible', `<div class="ficha-chips">${chips}</div>`) : '';
 }
 
+// Validación mínima antes de construir un `mailto:`: el dato viene de la BD,
+// pero un valor mal formado no debe convertirse en un enlace.
+const EMAIL_VALIDO = /^[^\s@<>"]+@[^\s@<>"]+\.[^\s@<>"]+$/;
+
+/** Bloque 5 — «Contacto»: email público de la protectora, si lo tiene. */
+function bloqueContacto(a) {
+    const email = String(a.email_protectora ?? '').trim();
+    if (!EMAIL_VALIDO.test(email)) return '';
+
+    const asunto = encodeURIComponent(`Interés en adoptar a ${a.nombre_animal ?? ''}`.trim());
+
+    return bloqueFicha('Contacto', `
+        <div class="ficha-dato ficha-contacto">
+            ${icono('correo', 18)}
+            <dl class="ficha-dato-texto">
+                <dt>${esc(a.nombre_protectora ?? 'Protectora')}</dt>
+                <dd><a href="mailto:${esc(email)}?subject=${asunto}">${esc(email)}</a></dd>
+            </dl>
+        </div>`);
+}
+
 function galeriaFicha(a) {
     const fotos = fotosDe(a);
 
+    // Con fotos, la principal es un botón que abre el visor a pantalla completa (js/visor.js).
     const principal = fotos.length
-        ? `<img src="${fotos[0]}" alt="Fotografía de ${esc(a.nombre_animal)}" id="fichaFotoPrincipal">`
+        ? `<button type="button" class="ficha-ampliar" data-accion="ficha-ampliar"
+                   aria-label="Ver las fotografías de ${esc(a.nombre_animal)} a pantalla completa">
+               <img src="${fotos[0]}" alt="Fotografía de ${esc(a.nombre_animal)}" id="fichaFotoPrincipal">
+               <span class="ficha-ampliar-pista" aria-hidden="true">${icono('expandir', 18)}</span>
+           </button>`
         : iconoEspecie(a.especie_animal, 64);
 
     // La tira de miniaturas es un hermano de la foto principal dentro del flex
@@ -265,6 +291,7 @@ function abrirFicha(animal) {
             ${bloqueEntrega(animal)}
             ${bloqueInfo(animal)}
             ${bloqueCompatible(animal)}
+            ${bloqueContacto(animal)}
 
             <div class="ficha-acciones">
                 <button type="button" class="btn-primario" data-accion="solicitar" data-id="${animal.id_animal}">

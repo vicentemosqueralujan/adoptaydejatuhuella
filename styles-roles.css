@@ -141,6 +141,75 @@
 }
 .ficha-principal img { width: 100%; height: 100%; object-fit: cover; }
 
+/* La foto principal es un botón: abre el visor a pantalla completa. */
+.ficha-ampliar {
+    position: relative; display: block;
+    width: 100%; height: 100%;
+    padding: 0; border: none; background: none;
+    cursor: zoom-in;
+}
+.ficha-ampliar:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+.ficha-ampliar-pista {
+    position: absolute; right: var(--space-3); bottom: var(--space-3);
+    display: grid; place-items: center;
+    width: 36px; height: 36px;
+    border-radius: var(--radius-full);
+    background: rgba(255, 255, 255, 0.9); color: var(--text-main);
+    box-shadow: var(--shadow-sm);
+    transition: transform var(--dur) var(--ease);
+}
+.ficha-ampliar:hover .ficha-ampliar-pista { transform: scale(1.06); }
+
+/* ---------------------------------------------------- Visor de fotografías -- */
+/* Hijo de `#modalFicha` (top layer): `position: fixed` lo extiende a toda la
+   ventana sin abrir un segundo modal. `[hidden]` ya fuerza `display: none`. */
+.visor {
+    position: fixed; inset: 0; z-index: 1;
+    display: flex; flex-direction: column;
+    width: 100vw; height: 100vh; height: 100dvh;
+    padding: env(safe-area-inset-top) env(safe-area-inset-right)
+             env(safe-area-inset-bottom) env(safe-area-inset-left);
+    background: var(--visor-fondo);
+    color: #FFFFFF;
+    animation: entradaVisor var(--dur) var(--ease);
+    touch-action: pan-y;   /* el gesto horizontal lo gestiona el visor */
+}
+@keyframes entradaVisor { from { opacity: 0; } to { opacity: 1; } }
+
+.visor-barra {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: var(--space-3) var(--space-4);
+    flex: none;
+}
+.visor-contador { font-size: var(--text-sm); font-weight: 500; font-variant-numeric: tabular-nums; opacity: 0.85; }
+
+.visor-escena {
+    position: relative; flex: 1 1 auto; min-height: 0;
+    display: grid; place-items: center;
+    padding: 0 var(--space-4) var(--space-4);
+}
+.visor-imagen {
+    max-width: 100%; max-height: 100%;
+    object-fit: contain;          /* foto entera, sin recortes, en cualquier orientación */
+    border-radius: var(--radius-sm);
+    user-select: none;
+}
+
+.visor-boton {
+    display: grid; place-items: center;
+    width: 44px; height: 44px;    /* objetivo táctil mínimo */
+    border: none; border-radius: var(--radius-full);
+    background: rgba(255, 255, 255, 0.12); color: #FFFFFF;
+    cursor: pointer;
+    transition: background-color var(--dur) var(--ease);
+}
+.visor-boton:hover { background: rgba(255, 255, 255, 0.22); }
+.visor-boton:focus-visible { outline: 2px solid #FFFFFF; outline-offset: 2px; }
+
+.visor-nav { position: absolute; top: 50%; transform: translateY(-50%); z-index: 1; }
+.visor-prev { left: var(--space-4); }
+.visor-next { right: var(--space-4); }
+
 .ficha-miniaturas {
     display: flex;
     gap: var(--space-2);            /* 0.5rem */
@@ -208,6 +277,12 @@
 .ficha-lista .icono { color: var(--badge-success-text); margin-top: 3px; }
 
 .ficha-texto { font-size: var(--text-base); color: var(--text-muted); white-space: pre-line; }
+
+.ficha-contacto a {
+    color: var(--primary); font-weight: 500;
+    text-decoration: none; overflow-wrap: anywhere;
+}
+.ficha-contacto a:hover { text-decoration: underline; text-underline-offset: 2px; }
 
 .ficha-chips { display: flex; flex-wrap: wrap; gap: var(--space-2); }
 .chip {
@@ -356,6 +431,12 @@
 }
 
 @media (max-width: 768px) {
+    /* Móvil: la foto ocupa todo el ancho y las flechas bajan al borde inferior,
+       fuera de la imagen; además se puede deslizar. */
+    .visor-escena { padding: 0 0 72px; }
+    .visor-imagen { border-radius: 0; }
+    .visor-nav { top: auto; bottom: var(--space-3); transform: none; }
+
     .panel-tabs { padding-inline: var(--space-4); overflow-x: auto; }
     .panel-tab { white-space: nowrap; }
     .catalogo-cuerpo { padding: var(--space-4); }

@@ -67,7 +67,10 @@ async function peticion(url, opciones = {}) {
     // Identifica al solicitante ante la API (ver la limitación anotada en api/_auth.js).
     if (estado.sesion?.id) cabeceras['X-Usuario-Id'] = String(estado.sesion.id);
 
-    const res = await fetch(url, { ...opciones, headers: cabeceras });
+    // `/api/x` → `api/x`: se resuelve contra la URL de la página, así funciona igual
+    // en la raíz (Vercel) que tras un proxy con prefijo (p. ej. `/proxy/3000/`).
+    const destino = url.startsWith('/') ? url.slice(1) : url;
+    const res = await fetch(destino, { ...opciones, headers: cabeceras });
 
     let data = null;
     try { data = await res.json(); } catch { /* respuesta sin cuerpo */ }
@@ -322,7 +325,7 @@ async function iniciarPanel() {
 async function cargarCatalogoRoles() {
     try {
         const { ok, data } = await peticion('/api/roles');
-        if (!ok) return;
+        if (!ok) return marcarRolesNoDisponibles();
 
         actualizarEstado({ roles: data.roles ?? [], rolPorDefecto: data.porDefecto ?? 'Adoptante' });
 
@@ -354,7 +357,15 @@ async function cargarCatalogoRoles() {
         }
     } catch (e) {
         console.error('[cargarCatalogoRoles]', e.message);
+        marcarRolesNoDisponibles();
     }
+}
+
+/** Sin roles, el desplegable dice por qué está vacío en vez de abrir una lista en blanco. */
+function marcarRolesNoDisponibles() {
+    const select = document.getElementById('regTipo');
+    if (select && !select.value)
+        select.innerHTML = '<option value="" disabled selected>No se pudieron cargar los tipos de cuenta</option>';
 }
 
 // ==========================================
@@ -405,6 +416,7 @@ function renderProtectoras() {
                 <span class="item-lista-texto">
                     <strong>${esc(p.nombre_protectora)}</strong>
                     ${p.ubicacion ? `<small>${esc(p.ubicacion)}</small>` : ''}
+                    ${p.email_protectora ? `<small>${esc(p.email_protectora)}</small>` : ''}
                 </span>
             </span>
             <span class="acciones-fila">
@@ -611,6 +623,7 @@ document.addEventListener('click', async e => {
         if (animal) abrirModalAnimal(animal);
         return;
     }
+    if (accion === 'editar' && entidad === 'protectoras') return editarProtectora(id);
     if (accion === 'editar')   return editarNombre(entidad, id, nombre);
     if (accion === 'eliminar') return eliminar(entidad, id);
 });
@@ -636,6 +649,66 @@ async function editarNombre(entidad, id, nombreActual) {
 
         await recargarEntidad(entidad);
         toast('Actualizado');
+    } catch (e) {
+        toast('Error de red: ' + e.message, 'error');
+    }
+}
+
+/** Formato mínimo de email; la validación definitiva la hace la API. */
+const EMAIL_CONTACTO_VALIDO = /^[^\s@<>"]+@[^\s@<>"]+\.[^\s@<>"]+$/;
+
+/** Guarda nombre y email público de una protectora (Admin, o la propia protectora). */
+function guardarProtectora(id, { nombre, email }) {
+    return peticion(`/api/protectoras?id=${encodeURIComponent(id)}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ nombre, email }),
+    });
+}
+
+/** Edición de protectora (Admin): nombre + email de contacto en un solo diálogo. */
+async function editarProtectora(id) {
+    const p = estado.protectoras.find(x => String(x.id_protectora) === String(id));
+    if (!p) return;
+
+    const datos = await abrirDialogo({
+        titulo: 'Editar protectora',
+        cuerpo: `
+            <label class="campo">
+                <span>Nombre de la protectora</span>
+                <input type="text" data-foco data-nombre value="${esc(p.nombre_protectora ?? '')}">
+            </label>
+            <label class="campo">
+                <span>Email de contacto público <small>(opcional)</small></span>
+                <input type="email" data-email maxlength="120" value="${esc(p.email_protectora ?? '')}"
+                       placeholder="adopciones@protectora.org">
+            </label>
+            <p class="campo-error" data-error hidden role="alert"></p>`,
+        acciones: [
+            { texto: 'Cancelar', clase: 'btn-secundario', valor: null },
+            {
+                texto: 'Guardar', clase: 'btn-primario', icono: 'guardar',
+                valor: dlg => {
+                    const nombre = dlg.querySelector('[data-nombre]').value.trim();
+                    const email  = dlg.querySelector('[data-email]').value.trim();
+                    const fallo  = !nombre ? 'El nombre no puede estar vacío'
+                        : (email && !EMAIL_CONTACTO_VALIDO.test(email)) ? 'El email de contacto no es válido'
+                        : null;
+                    if (!fallo) return { nombre, email };
+                    const error = dlg.querySelector('[data-error]');
+                    error.textContent = fallo;
+                    error.hidden = false;
+                    return undefined; // el diálogo sigue abierto
+                },
+            },
+        ],
+    });
+    if (!datos) return;
+
+    try {
+        const { ok, data } = await guardarProtectora(id, datos);
+        if (!ok) return toast(data?.error || 'No se pudo actualizar', 'error');
+        await recargarEntidad('protectoras');
+        toast('Protectora actualizada');
     } catch (e) {
         toast('Error de red: ' + e.message, 'error');
     }
@@ -694,6 +767,7 @@ document.getElementById('formProtectora')?.addEventListener('submit', async e =>
             body: JSON.stringify({
                 nombre:    document.getElementById('p_nombre').value,
                 ubicacion: document.getElementById('p_ubicacion').value,
+                email:     document.getElementById('p_email').value.trim(),
             }),
         });
 
@@ -714,6 +788,12 @@ document.getElementById('formProtectora')?.addEventListener('submit', async e =>
 // ==========================================
 const modalPerfil = document.getElementById('modalPerfil');
 
+/** Protectora de la sesión si su rol es Protectora; `null` en otro caso. */
+function protectoraPropia() {
+    if (estado.sesion?.tipo !== 'Protectora' || !estado.sesion.idProtectora) return null;
+    return estado.protectoras.find(p => String(p.id_protectora) === String(estado.sesion.idProtectora)) ?? null;
+}
+
 document.getElementById('btnMiCuenta')?.addEventListener('click', () => {
     if (!modalPerfil || !estado.sesion) return;
 
@@ -727,6 +807,15 @@ document.getElementById('btnMiCuenta')?.addEventListener('click', () => {
         const protectora = estado.sesion.nombreProtectora;
         rol.textContent = `Rol: ${estado.sesion.etiquetaRol ?? estado.sesion.tipo}` +
             (protectora ? ` · ${protectora}` : '');
+    }
+
+    // Una cuenta Protectora edita aquí los datos públicos de SU protectora.
+    const miProtectora = protectoraPropia();
+    const grupo = document.getElementById('pfGrupoProtectora');
+    if (grupo) grupo.hidden = !miProtectora;
+    if (miProtectora) {
+        document.getElementById('pf_prot_nombre').value = miProtectora.nombre_protectora ?? '';
+        document.getElementById('pf_prot_email').value  = miProtectora.email_protectora ?? '';
     }
 
     mostrarError('modalPerfilError', null);
@@ -749,6 +838,15 @@ document.getElementById('formPerfil')?.addEventListener('submit', async e => {
     if (password && password.length < 8)
         return mostrarError('modalPerfilError', 'La contraseña debe tener al menos 8 caracteres');
 
+    const miProtectora = protectoraPropia();
+    const prot = miProtectora && {
+        nombre: document.getElementById('pf_prot_nombre').value.trim(),
+        email:  document.getElementById('pf_prot_email').value.trim(),
+    };
+    if (prot && !prot.nombre) return mostrarError('modalPerfilError', 'El nombre de la protectora es obligatorio');
+    if (prot?.email && !EMAIL_CONTACTO_VALIDO.test(prot.email))
+        return mostrarError('modalPerfilError', 'El email de contacto no es válido');
+
     const cuerpo = { nombre, email };
     if (password) cuerpo.password = password;
 
@@ -762,8 +860,21 @@ document.getElementById('formPerfil')?.addEventListener('submit', async e => {
 
         if (!ok) return mostrarError('modalPerfilError', data?.error || 'No se pudieron guardar los cambios');
 
+        const protCambiada = prot && (prot.nombre !== (miProtectora.nombre_protectora ?? '')
+            || prot.email !== (miProtectora.email_protectora ?? ''));
+        if (protCambiada) {
+            const r = await guardarProtectora(miProtectora.id_protectora, prot);
+            if (!r.ok) return mostrarError('modalPerfilError', r.data?.error || 'No se pudo guardar la protectora');
+            await Promise.all([cargarProtectoras(), cargarCatalogo()]);
+        }
+
         // La sesión guardada se refresca con los datos nuevos, sin tocar rol ni permisos.
-        const sesion = { ...estado.sesion, nombre: data.usuario.nombre, email: data.usuario.email };
+        const sesion = {
+            ...estado.sesion,
+            nombre: data.usuario.nombre,
+            email: data.usuario.email,
+            nombreProtectora: prot?.nombre ?? estado.sesion.nombreProtectora,
+        };
         localStorage.setItem(CLAVE_SESION, JSON.stringify(sesion));
         actualizarEstado({ sesion });
         aplicarPermisos();

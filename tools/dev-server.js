@@ -7,12 +7,33 @@
  * (req.query, req.body ya parseado, res.status().json()).
  *
  * Uso:  node tools/dev-server.js [puerto]     (por defecto 3000)
+ *
+ * Si existe `.env` en la raíz se cargan sus variables (p. ej. `POSTGRES_URL` de
+ * una rama de Neon para pruebas). Sólo afecta a este proceso local: en Vercel
+ * este fichero no se ejecuta y las variables salen de la configuración del proyecto.
  */
 const http = require('http');
 const fs = require('fs');
 const path = require('path');
 
 const ROOT = path.resolve(__dirname, '..');
+
+cargarEnvLocal(path.join(ROOT, '.env'));
+
+/**
+ * Carga `.env` con el soporte nativo de Node (≥ 20.12), sin dependencias.
+ * Las variables ya definidas en el entorno tienen prioridad y no se pisan.
+ */
+function cargarEnvLocal(ruta) {
+    if (!fs.existsSync(ruta)) return;
+    if (typeof process.loadEnvFile !== 'function') {
+        console.warn('> .env ignorado: requiere Node 20.12 o superior');
+        return;
+    }
+    process.loadEnvFile(ruta);
+    // Sólo se informa de QUÉ hay, nunca del valor: la URL lleva la contraseña.
+    console.log(`> .env cargado (POSTGRES_URL ${process.env.POSTGRES_URL ? 'definida' : 'ausente'})`);
+}
 const API_DIR = path.join(ROOT, 'api');
 const PORT = Number(process.argv[2] || process.env.PORT || 3000);
 // Un alta de animal puede llevar 6 fotos comprimidas en base64 (~800 KB) más
@@ -97,11 +118,19 @@ async function servirApi(req, res, recurso) {
     }
 }
 
+// Nunca se sirven como estáticos: secretos (`.env`, `.git`…) ni código de servidor.
+const CARPETAS_PRIVADAS = new Set(['api', 'tools', 'db', 'node_modules']);
+
+function esRutaPrivada(relativa) {
+    const segmentos = relativa.split(/[\\/]+/).filter(Boolean);
+    return segmentos.some(s => s.startsWith('.')) || CARPETAS_PRIVADAS.has(segmentos[0]);
+}
+
 function servirEstatico(req, res, rutaUrl) {
     const relativa = rutaUrl === '/' ? '/index.html' : rutaUrl;
     const file = path.join(ROOT, relativa);
 
-    if (!file.startsWith(ROOT + path.sep) || !fs.existsSync(file) || fs.statSync(file).isDirectory()) {
+    if (esRutaPrivada(relativa) || !file.startsWith(ROOT + path.sep) || !fs.existsSync(file) || fs.statSync(file).isDirectory()) {
         res.writeHead(404, { 'Content-Type': MIME_TYPES['.txt'] });
         return res.end('404 Not Found');
     }

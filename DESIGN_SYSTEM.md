@@ -234,6 +234,25 @@ cuatro bloques, en este orden y con estos títulos literales:
 2. **Me entregan** — condiciones sanitarias y de adopción. Lista con marca de verificación.
 3. **Tienes que saber que** — carácter, necesidades especiales o historia. Párrafo libre.
 4. **Compatible** — convivencia con perros, gatos y niños. Chips de estado.
+5. **Contacto** — email público de la protectora (`protectora.email_protectora`) con el
+   mismo patrón `.ficha-dato` (icono SVG `correo` 18 px + `dt` nombre de la protectora +
+   `dd` enlace). El enlace es `mailto:` con asunto prellenado, color `--primary`, peso 500,
+   subrayado sólo en hover y `overflow-wrap: anywhere` para emails largos. Si el email
+   falta o no es válido, el bloque no se pinta.
+
+   **Edición del email.** Campo «Email de contacto público» (`type="email"`,
+   `maxlength="120"`, placeholder `adopciones@protectora.org`, etiqueta con `<small>`
+   «(opcional)» o «(se muestra en las fichas)»). Aparece en el alta de protectora y en el
+   diálogo «Editar protectora» (Admin), y en el grupo «Mi protectora» de «Mis datos»
+   (cuenta Protectora). En la lista de protectoras el email se muestra como segundo
+   `<small>` bajo el nombre.
+
+#### Grupo de campos (`.grupo-campos`)
+
+`<fieldset class="grupo-campos">` con `<legend>` agrupa campos de otra entidad dentro de
+un formulario (p. ej. «Mi protectora» en «Mis datos»): columna flex con `gap: --space-4`,
+`border-top: 1px solid --border` y `padding-top: --space-4`. La leyenda usa `--text-sm`,
+peso 600. Se oculta con el atributo `hidden` cuando el rol no lo necesita.
 
 Un bloque sin datos **no se renderiza**: no se muestran secciones vacías ni «—».
 
@@ -245,6 +264,23 @@ contenedor: nunca se solapan. Las miniaturas van en fila
 lleva `border: 2px solid var(--primary)` y `--shadow-seleccion`; las inactivas llevan
 ese mismo borde en transparente, para que seleccionar no desplace la fila. Pulsar una
 miniatura cambia la foto principal al instante.
+
+**Visor a pantalla completa** (`js/visor.js`, `.visor`). La foto principal es un
+`<button class="ficha-ampliar">` (`cursor: zoom-in`) con una pista circular de 36 px
+abajo a la derecha (fondo blanco 90 %, icono SVG `expandir` 18 px, `--shadow-sm`).
+Al pulsarla se abre el visor:
+
+| Elemento | Especificación |
+|---|---|
+| Contenedor `.visor` | Hijo de `#modalFicha`, `position: fixed; inset: 0`, `100dvh`, fondo `--visor-fondo` (`rgba(28,25,23,.96)`), padding `env(safe-area-inset-*)`, fundido de entrada `--dur` |
+| Imagen `.visor-imagen` | `max-width/max-height: 100%; object-fit: contain` — nunca se recorta |
+| Barra superior | Contador `n / total` (`--text-sm`, 500, cifras tabulares) + botón cerrar |
+| Botones `.visor-boton` | Círculo 44 × 44 px (objetivo táctil), blanco 12 % → 22 % en hover, iconos `cerrar`, `flecha-izq`, `flecha-der` a 24 px, foco con contorno blanco |
+| Escritorio | Flechas centradas en vertical a los lados |
+| Móvil (≤ 768 px) | Imagen a todo el ancho sin radio, flechas en el borde inferior, gesto de deslizar (≥ 50 px) |
+
+Teclado: `←`/`→` navegan, `Esc` cierra sólo el visor (se cancela el `cancel` del
+`<dialog>`). Al cerrar, el foco vuelve a la foto y la ficha muestra la última foto vista.
 
 ### 5.4 Modales
 
@@ -300,7 +336,8 @@ Nunca hay dos modales visibles a la vez. Toda apertura pasa por el gestor de
 El estado visible es el atributo nativo `open` del `<dialog>`; no hay clases de
 visibilidad que limpiar. `Esc` cierra el modal activo de forma nativa. Los diálogos
 generados (`aviso`, `confirmar`, `pedirTexto`) siguen la misma política: sustituyen al
-modal que hubiera abierto, nunca se apilan sobre él.
+modal que hubiera abierto, nunca se apilan sobre él. El visor de fotos no es una
+excepción: es una capa interna de `#modalFicha`, no otro `<dialog>`.
 
 #### Orden de capas
 

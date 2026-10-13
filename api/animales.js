@@ -8,6 +8,7 @@ const {
     normalizarFicha,
     validarEdadFecha,
 } = require('./_animal-campos.js');
+const { tieneEmailProtectora } = require('./_protectora-email.js');
 
 const PERMISO_GESTION   = 'animales:gestionar';
 const ESTADO_DISPONIBLE = 'Disponible';
@@ -89,8 +90,10 @@ async function listar(req, columnas, { esGestor, protectoraPropia }) {
 
     const where = condiciones.length ? `WHERE ${condiciones.join(' AND ')}` : '';
 
+    const emailProtectora = (await tieneEmailProtectora()) ? ', p.email_protectora' : '';
+
     const { rows } = await sql.query(`
-        SELECT ${proyeccion(columnas)}, p.nombre_protectora
+        SELECT ${proyeccion(columnas)}, p.nombre_protectora${emailProtectora}
         FROM animal a
         LEFT JOIN protectora p ON p.id_protectora = a.id_protectora
         ${where}

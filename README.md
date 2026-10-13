@@ -106,7 +106,7 @@ Tres entidades normalizadas (los nombres de columna son los que usan los handler
 | Tabla | Clave primaria | Columnas |
 | :--- | :--- | :--- |
 | `usuario` | `id_usuario` | `nombre_usuario`, `email`, `password`, `tipo_usuario`, `id_protectora` → `protectora` |
-| `protectora` | `id_protectora` | `nombre_protectora`, `ubicacion` |
+| `protectora` | `id_protectora` | `nombre_protectora`, `ubicacion`, `email_protectora` (opcional, migración 003) |
 | `animal` | `id_animal` | `nombre_animal`, `especie_animal`, `edad`, `estado`, `id_protectora` → `protectora`, más los campos de ficha de la tabla siguiente |
 
 `animal.estado` admite `'Disponible'`, `'Reservado'` y `'Adoptado'`, y se inicializa a
@@ -144,6 +144,7 @@ Aplica la migración antes de usarlos:
 
 ```bash
 psql "$POSTGRES_URL" -f db/002-animal-ficha.sql
+psql "$POSTGRES_URL" -f db/003-protectora-email.sql   # email de contacto de la protectora
 ```
 
 Es idempotente y añade además las restricciones `CHECK` de cada campo y los índices
@@ -244,7 +245,27 @@ de viewport, descripción, `theme-color`, Apple Web App y Open Graph.
    equivalente que sirve los estáticos y enruta `/api/*` a los handlers de `api/`:
    ```bash
    npm run dev:local        # node tools/dev-server.js  →  http://localhost:3000
+   node tools/dev-server.js 3998   # otro puerto
    ```
+
+   **`.env` opcional (sólo desarrollo local).** Si existe `.env` en la raíz con
+   `POSTGRES_URL=...` (p. ej. una rama de Neon para pruebas), `tools/dev-server.js` lo
+   carga al arrancar con `process.loadEnvFile` (Node ≥ 20.12, sin dependencias) y lo
+   anuncia como `> .env cargado (POSTGRES_URL definida)`, sin mostrar el valor. Una
+   variable ya exportada en la terminal tiene prioridad sobre la del fichero.
+
+   - Es **independiente de producción**: Vercel no ejecuta `tools/dev-server.js` y toma
+     `POSTGRES_URL` de las variables del proyecto. Ni `package.json` ni ningún handler
+     de `api/` leen `.env`.
+   - `.env` está en `.gitignore`: nunca se sube al repositorio.
+   - El servidor local responde `404` a cualquier ruta con un segmento que empiece por
+     `.` (`/.env`, `/.git/…`) y a `api/`, `tools/`, `db/` y `node_modules/`, así que el
+     fichero no puede descargarse desde el navegador.
+
+   **Detrás de un proxy con prefijo** (code-server, p. ej. `https://…/proxy/3000/`): el
+   frontend resuelve las llamadas `/api/*` y los iconos de forma relativa a la página, así
+   que funcionan igual en la raíz de Vercel que bajo ese prefijo. Arranca el servidor en el
+   puerto que abre el proxy (`node tools/dev-server.js 3000` para `/proxy/3000/`).
 
 ### Verificación de assets por terminal
 
@@ -370,6 +391,7 @@ permisos en la respuesta y el frontend muestra u oculta cada bloque marcado con
 | Gestión de animales (alta, edición, listado) | `animales:gestionar` | — | ✅ | ✅ *(solo los suyos)* | — |
 | Mis favoritos y solicitud de adopción | *sesión iniciada* | — | ✅ | ✅ | ✅ |
 | Botón «Mis datos» | *sesión iniciada* | — | ✅ | ✅ | ✅ |
+| Editar nombre y email público de una protectora | `protectoras:gestionar` o ser su cuenta | — | ✅ *(todas)* | ✅ *(solo la suya)* | — |
 
 > **Regla de ocultación.** `aplicarPermisos()` activa el atributo `hidden` sobre cada
 > bloque `[data-permiso]`. La regla del navegador `[hidden] { display: none }` pierde por
@@ -394,6 +416,24 @@ siempre la del usuario e ignora cualquier `id_protectora` recibido. Una protecto
 
 **Mis datos (todos los roles).** Botón en la cabecera que abre un modal para cambiar
 nombre, correo y contraseña contra `PATCH /api/perfil`. El rol se muestra pero no se edita.
+Para una cuenta `Protectora` el modal añade el grupo **«Mi protectora»** (nombre y
+*Email de contacto público*), que se guarda con `PATCH /api/protectoras?id=<la suya>`.
+
+**Email público de la protectora.** Lo editan el `Admin` (al registrar una protectora y
+con el botón «Editar» de la lista, que abre un diálogo con nombre + email) y la propia
+protectora desde «Mis datos». Reglas de `api/protectoras.js`:
+
+| Método | Quién | Notas |
+| :--- | :--- | :--- |
+| `GET` | público | Alimenta el catálogo y el registro. |
+| `POST` | `Admin` | Acepta `nombre`, `ubicacion` y `email`. |
+| `PATCH ?id=` | `Admin`, o `Protectora` si `id` es la suya | `nombre` y/o `email`. `email: ""` borra el contacto. |
+| `DELETE ?id=` | `Admin` | `409` si tiene usuarios o animales vinculados. |
+
+Sin `X-Usuario-Id` válido la API responde `401`; sin permiso, `403`. El email se recorta,
+se pasa a minúsculas y se valida (formato y 120 caracteres máx.). Si falta la migración 003,
+enviar `email` devuelve `409`. Antes de este cambio el endpoint no exigía autenticación
+para escribir.
 
 **Mis favoritos (`Adoptante`).** Cada tarjeta del catálogo lleva un botón de corazón. La
 lista se guarda en `localStorage` bajo la clave `favoritos:<idUsuario>`, de modo que dos
@@ -422,8 +462,25 @@ derecha:
 2. **Me entregan** — condiciones sanitarias y de adopción, una por línea.
 3. **Tienes que saber que** — carácter, necesidades especiales o historia.
 4. **Compatible** — convivencia con perros, gatos y niños.
+5. **Contacto** — email público de la protectora como enlace `mailto:` (asunto
+   «Interés en adoptar a <nombre>»). Sale de `protectora.email_protectora`, nunca del
+   email de inicio de sesión de las cuentas.
 
 Un bloque sin datos no se renderiza: no hay secciones vacías ni guiones de relleno.
+
+**Fotos a pantalla completa.** Pulsar la foto principal de la ficha (lleva un botón con el
+icono «expandir» en la esquina) abre el visor de `js/visor.js`, en escritorio y en móvil:
+
+| Acción | Escritorio | Móvil |
+| :--- | :--- | :--- |
+| Abrir | Clic en la foto principal | Toque en la foto principal |
+| Anterior / siguiente | Flechas laterales o `←` / `→` | Deslizar o flechas inferiores |
+| Cerrar | Botón ✕, `Esc` o clic en el fondo | Botón ✕ o toque en el fondo |
+
+La foto se ve entera (`object-fit: contain`) sobre fondo oscuro y respeta las zonas seguras
+del móvil. `Esc` cierra sólo el visor, no la ficha, y al cerrarlo la ficha queda en la última
+foto vista. El visor es parte de `#modalFicha`, no un segundo `<dialog>`, así que no rompe
+la regla de un único modal abierto. Con una sola foto se ocultan las flechas.
 
 ### Sistema de diseño
 
@@ -516,12 +573,14 @@ adoptaydejatuhuella/
 │   ├── protectoras.js       # CRUD de protectoras
 │   └── usuarios.js          # CRUD de usuarios
 ├── db/
-│   └── 002-animal-ficha.sql # Migración de la ficha detallada y las fotos
+│   ├── 002-animal-ficha.sql # Migración de la ficha detallada y las fotos
+│   └── 003-protectora-email.sql # Email público de contacto de la protectora
 ├── js/
 │   ├── icons.js             # Registro único de iconos SVG inline
 │   ├── ui.js                # Toasts, confirmaciones y diálogos del sistema de diseño
 │   ├── fotos.js             # Compresión con <canvas> y galería de hasta 6 fotos
-│   └── ficha.js             # Los 4 bloques de la ficha detallada del animal
+│   ├── ficha.js             # Los bloques de la ficha detallada del animal
+│   └── visor.js             # Visor de fotos a pantalla completa dentro de la ficha
 ├── tools/
 │   ├── dev-server.js        # Servidor local equivalente a `vercel dev`
 │   └── generate-icons.py    # Generador reproducible de iconos PWA

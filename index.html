@@ -9,7 +9,7 @@
     <meta name="color-scheme" content="light">
 
     <!-- ===== PWA / Mobile ===== -->
-    <link rel="manifest" href="/manifest.json">
+    <link rel="manifest" href="manifest.json">
     <meta name="theme-color" content="#7A4E23">
     <meta name="application-name" content="Adopta y Deja tu Huella">
     <meta name="mobile-web-app-capable" content="yes">
@@ -19,9 +19,9 @@
     <meta name="format-detection" content="telephone=no">
 
     <!-- ===== Favicons ===== -->
-    <link rel="icon" href="/favicon.ico" sizes="48x48">
-    <link rel="icon" href="/favicon.svg" type="image/svg+xml" sizes="any">
-    <link rel="apple-touch-icon" href="/apple-touch-icon.png" sizes="180x180">
+    <link rel="icon" href="favicon.ico" sizes="48x48">
+    <link rel="icon" href="favicon.svg" type="image/svg+xml" sizes="any">
+    <link rel="apple-touch-icon" href="apple-touch-icon.png" sizes="180x180">
 
     <!-- ===== Open Graph / Twitter ===== -->
     <meta property="og:type" content="website">
@@ -35,8 +35,8 @@
     <!-- ===== Estilos ===== -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link rel="stylesheet" href="styles.css?v=20261013">
-    <link rel="stylesheet" href="styles-roles.css?v=20261013">
+    <link rel="stylesheet" href="styles.css?v=20261013e">
+    <link rel="stylesheet" href="styles-roles.css?v=20261013e">
 </head>
 <body>
 
@@ -173,6 +173,11 @@
                             <span>Ubicación <small>(opcional)</small></span>
                             <input type="text" id="p_ubicacion" autocomplete="address-level2">
                         </label>
+                        <label class="campo">
+                            <span>Email de contacto público <small>(opcional)</small></span>
+                            <input type="email" id="p_email" autocomplete="off" maxlength="120"
+                                   placeholder="adopciones@protectora.org">
+                        </label>
                         <button type="submit" class="btn-primario btn-bloque">Registrar protectora</button>
                     </form>
                     <ul id="listaProtectoras" class="lista"></ul>
@@ -291,7 +296,9 @@
             </label>
             <label class="campo">
                 <span>Tipo de cuenta</span>
-                <select id="regTipo" required></select>
+                <select id="regTipo" required>
+                    <option value="" disabled selected>Cargando tipos de cuenta…</option>
+                </select>
             </label>
             <label class="campo" id="regCampoProtectora" hidden>
                 <span>Protectora a la que perteneces</span>
@@ -314,6 +321,23 @@
             <button type="button" class="btn-icono" id="btnCerrarFicha" aria-label="Cerrar"></button>
         </div>
         <div class="ficha-cuerpo" id="fichaCuerpo"></div>
+
+        <!-- Visor a pantalla completa: parte de la ficha, no un segundo modal. -->
+        <div class="visor" id="visorFotos" role="dialog" aria-modal="true"
+             aria-label="Fotografías a pantalla completa" hidden>
+            <div class="visor-barra">
+                <span class="visor-contador" id="visorContador" aria-live="polite"></span>
+                <button type="button" class="visor-boton" id="visorCerrar"
+                        aria-label="Cerrar pantalla completa"></button>
+            </div>
+            <div class="visor-escena">
+                <button type="button" class="visor-boton visor-nav visor-prev" id="visorPrev"
+                        aria-label="Foto anterior"></button>
+                <img class="visor-imagen" id="visorImagen" alt="" draggable="false">
+                <button type="button" class="visor-boton visor-nav visor-next" id="visorNext"
+                        aria-label="Foto siguiente"></button>
+            </div>
+        </div>
     </dialog>
 
     <!-- ===== ALTA Y EDICIÓN DE ANIMAL ===== -->
@@ -541,6 +565,21 @@
                 </label>
 
                 <p class="campo-ayuda" id="pf_rol"></p>
+
+                <!-- Sólo para cuentas Protectora: datos públicos de SU protectora. -->
+                <fieldset class="grupo-campos" id="pfGrupoProtectora" hidden>
+                    <legend>Mi protectora</legend>
+                    <label class="campo">
+                        <span>Nombre de la protectora</span>
+                        <input type="text" id="pf_prot_nombre" autocomplete="organization">
+                    </label>
+                    <label class="campo">
+                        <span>Email de contacto público <small>(se muestra en las fichas)</small></span>
+                        <input type="email" id="pf_prot_email" autocomplete="off" maxlength="120"
+                               placeholder="adopciones@protectora.org">
+                    </label>
+                </fieldset>
+
                 <p class="modal-error" id="modalPerfilError" hidden role="alert"></p>
             </div>
 
@@ -552,11 +591,12 @@
     </dialog>
 
     <!-- El orden importa: icons y ui definen las utilidades que usan el resto. -->
-    <script src="js/icons.js?v=20261013" defer></script>
-    <script src="js/ui.js?v=20261013" defer></script>
-    <script src="js/fotos.js?v=20261013" defer></script>
-    <script src="js/ficha.js?v=20261013" defer></script>
-    <script src="scripts.js?v=20261013" defer></script>
-    <script src="registro-catalogo.js?v=20261013" defer></script>
+    <script src="js/icons.js?v=20261013e" defer></script>
+    <script src="js/ui.js?v=20261013e" defer></script>
+    <script src="js/fotos.js?v=20261013e" defer></script>
+    <script src="js/ficha.js?v=20261013e" defer></script>
+    <script src="js/visor.js?v=20261013e" defer></script>
+    <script src="scripts.js?v=20261013e" defer></script>
+    <script src="registro-catalogo.js?v=20261013e" defer></script>
 </body>
 </html>
