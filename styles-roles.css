@@ -315,15 +315,18 @@
    pantalla baja, ni el botón ni la nota del pie se salen del modal. */
 .acceso-cuerpo {
     display: flex; flex-direction: column; gap: var(--space-4);
-    padding: var(--space-5);
-    padding-bottom: 1rem;
+    padding: 1.25rem;
     overflow-y: auto;
     flex: 1 1 auto;
     min-height: 0;
 }
 
+/* Aire extra bajo «Entrar» / «Crear mi cuenta»: al llegar abajo del scroll el
+   botón se ve entero, sin quedar pegado al borde del modal. */
+.acceso-cuerpo .btn-bloque { margin-top: var(--space-1); margin-bottom: var(--space-1); }
+
 .acceso-pie {
-    padding: 0 var(--space-5) var(--space-5);
+    padding: var(--space-3) 1.25rem var(--space-5);
     font-size: var(--text-xs); color: var(--text-muted); text-align: center;
     flex: none;
 }

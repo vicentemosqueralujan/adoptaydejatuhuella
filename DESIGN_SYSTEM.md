@@ -258,7 +258,10 @@ miniatura cambia la foto principal al instante.
     box-shadow: var(--shadow-lg);
     padding: 0;
     max-width: min(560px, calc(100vw - 2rem));
-    max-height: calc(100dvh - 2rem);
+    max-height: min(90vh, 90dvh);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
 }
 .modal::backdrop { background: rgba(28, 25, 23, 0.4); }
 ```
@@ -267,6 +270,24 @@ miniatura cambia la foto principal al instante.
 - Estructura fija: `.modal-head` (título + cerrar) · `.modal-body` (desplazable)
   · `.modal-foot` (acciones alineadas a la derecha, secundaria primero).
 - Cabecera y pie quedan fijos; sólo el cuerpo hace scroll.
+
+#### Contrato de scroll en modales
+
+El contenedor es la caja que limita la altura y **nunca** scrollea; el cuerpo es la
+única zona desplazable. Sin este reparto, el contenido largo se recorta o desborda:
+
+| Capa | Reglas obligatorias |
+|---|---|
+| Contenedor (`.modal`) | `max-height: min(90vh, 90dvh); display: flex; flex-direction: column; overflow: hidden;` |
+| Cuerpo (`.modal-body`, `.acceso-cuerpo`) | `overflow-y: auto; flex: 1 1 auto; min-height: 0; padding: 1.25rem;` |
+| Cabecera, pestañas y pie | `flex: none` y padding lateral igual al del cuerpo (`1.25rem`) |
+
+`min-height: 0` es imprescindible: sin él, un hijo flex no baja de su altura de
+contenido y el modal crece hasta recortar el pie.
+
+En el modal de acceso (`#modalAcceso`), cada `<form class="acceso-cuerpo">` es la zona
+desplazable, de forma que «Entrar» y «Crear mi cuenta» se ven enteros, con su margen
+vertical propio, y la nota de `.acceso-pie` conserva su padding superior.
 - Se cierra con `Esc`, con el botón de cerrar y con clic en el backdrop.
 - El foco entra en el primer campo y queda atrapado mientras está abierto.
 
@@ -300,12 +321,29 @@ Mapa fijo: `Disponible` → success · `Reservado` → warning · `Adoptado` →
 |---|---|
 | ≥ 1200 px | Contenedor máximo 1180 px centrado. Ficha a dos columnas. |
 | 768–1199 px | Rejilla de catálogo fluida. Ficha a dos columnas estrechas. |
+| ≥ 769 px | Barra de accesos visible entera; el botón de menú (`#btnMenu`) queda oculto. |
 | < 768 px | Ficha apilada, cabecera con buscador a ancho completo, modales a 100 % menos 1 rem de margen. Los accesos se pliegan tras el botón de menú. |
 | < 480 px | Rejilla de catálogo a una columna; pies de modal a ancho completo. |
 
 ### Navegación en móvil
 
-Por debajo de 768 px los accesos de la cabecera se repliegan tras un botón de menú
+El botón de menú es **exclusivo de móvil**. Por defecto `.nav-hamburguesa` está en
+`display: none` y sólo pasa a `inline-flex` por debajo de 768 px; en escritorio se
+refuerza con una regla propia para que ninguna utilidad posterior lo reintroduzca:
+
+```css
+.nav-hamburguesa { display: none; }
+
+@media (min-width: 769px) {
+    #btnMenu { display: none !important; }
+}
+
+@media (max-width: 768px) {
+    .nav-hamburguesa { display: inline-flex; margin-left: auto; }
+}
+```
+
+Por debajo de 768 px los accesos de la cabecera se repliegan tras ese botón
 (icono `menu` del registro, nunca un emoji ni tres `<span>`). El desplegable:
 
 - se ancla a la fila de cabecera (`position: absolute; top: 100%`) y ocupa el ancho
@@ -317,9 +355,9 @@ Por debajo de 768 px los accesos de la cabecera se repliegan tras un botón de m
 
 ### Seguridad de área en iOS
 
-Los modales usan `max-height: min(85vh, 85dvh)`: en iPhone, `vh` ignora la barra
-flotante de Safari y `dvh` la descuenta, de modo que el menor de los dos impide que el
-pie del modal quede recortado. El pie añade además
+Los modales usan `max-height: min(90vh, 90dvh)` (y `min(85vh, 85dvh)` por debajo de
+480 px): en iPhone, `vh` ignora la barra flotante de Safari y `dvh` la descuenta, de
+modo que el menor de los dos impide que el pie del modal quede recortado. El pie añade además
 `padding-bottom: calc(var(--space-4) + env(safe-area-inset-bottom, 0px))` para no
 quedar bajo el indicador de inicio.
 
@@ -335,6 +373,9 @@ Objetivo táctil mínimo de 44×44 px en todos los breakpoints.
 - [ ] Todos los espaciados usan tokens `--space-*`.
 - [ ] Hover, focus-visible, active y disabled definidos en cada control.
 - [ ] Los modales están centrados con `margin: auto; inset: 0` y radio 12 px.
+- [ ] El contenedor del modal recorta (`overflow: hidden`) y sólo el cuerpo scrollea
+      (`overflow-y: auto; flex: 1 1 auto; min-height: 0`).
+- [ ] El botón de menú no aparece en escritorio (≥ 769 px).
 - [ ] Contraste de texto AA comprobado.
 - [ ] Probado a 360, 768, 1024 y 1440 px sin desbordes horizontales.
 - [ ] `prefers-reduced-motion` desactiva las animaciones.

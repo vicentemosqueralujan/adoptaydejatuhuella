@@ -164,6 +164,12 @@ a { color: var(--primary); text-underline-offset: 3px; }
 /* Sólo aparece por debajo de 768 px (ver la consulta de medios del final). */
 .nav-hamburguesa { display: none; }
 
+/* El menú plegable es exclusivo de móvil (<768px). En escritorio la barra de
+   accesos se muestra entera, así que el botón se oculta sin excepción. */
+@media (min-width: 769px) {
+    #btnMenu { display: none !important; }
+}
+
 /* ---------------------------------------------------------------- Botones -- */
 .btn-primario, .btn-secundario, .btn-texto, .btn-peligro {
     display: inline-flex; align-items: center; justify-content: center; gap: var(--space-2);
@@ -385,16 +391,18 @@ legend { font-size: var(--text-sm); font-weight: 500; margin-bottom: var(--space
     inset: 0;
     width: 100%;
     max-width: min(560px, calc(100vw - 2rem));
-    /* 85vh deja siempre aire alrededor; la variante dvh evita que la barra del
-       navegador móvil recorte el pie del modal. */
-    max-height: 85vh;
-    max-height: 85dvh;
+    /* `min(90vh, 90dvh)` deja aire alrededor y, a la vez, descuenta la barra del
+       navegador móvil: el pie del modal nunca queda bajo ella. */
+    max-height: min(90vh, 90dvh);
     padding: 0;
     border: none;
     border-radius: 12px;
     background: var(--bg-card);
     color: var(--text-main);
     box-shadow: var(--shadow-lg);
+    /* Columna + overflow oculto: el recorte vive en el cuerpo desplazable, no aquí. */
+    display: flex;
+    flex-direction: column;
     overflow: hidden;
 }
 .modal::backdrop { background: rgba(28, 25, 23, 0.4); backdrop-filter: blur(2px); }

@@ -442,8 +442,10 @@ SweetAlert2 se han sustituido por el registro de iconos propio y por los diálog
     margin: auto; inset: 0;
     border: none; border-radius: 12px;
     max-width: min(560px, calc(100vw - 2rem));
-    max-height: calc(100dvh - 2rem);
+    max-height: min(90vh, 90dvh);
     padding: 0;
+    display: flex; flex-direction: column;
+    overflow: hidden;   /* el recorte vive aquí; el scroll, en el cuerpo */
 }
 
 /* `display` sólo cuando está abierto: un `display` incondicional anularía la
@@ -451,10 +453,16 @@ SweetAlert2 se han sustituido por el registro de iconos propio y por los diálog
 .modal[open] { display: flex; flex-direction: column; }
 ```
 
-El cuerpo (`.modal-body`) es la única zona que scrollea, con cabecera y pie fijos, de
-modo que los botones Cancelar y Guardar nunca se desbordan. Se cierran con `Esc`, con el
-botón de cerrar y con clic en el fondo. Por debajo de 480 px el pie reparte los botones
-a lo ancho.
+El cuerpo (`.modal-body`; `.acceso-cuerpo` en el modal de acceso) es la única zona que
+scrollea —`overflow-y: auto; flex: 1 1 auto; min-height: 0; padding: 1.25rem`—, con
+cabecera, pestañas y pie fijos en `flex: none`. Así los botones «Entrar», «Crear mi
+cuenta», Cancelar y Guardar se ven enteros, igual que la nota de pie del modal de
+acceso, sin recortes ni desbordes. Se cierran con `Esc`, con el botón de cerrar y con
+clic en el fondo. Por debajo de 480 px el pie reparte los botones a lo ancho.
+
+**Navegación por breakpoint.** El botón de menú (`#btnMenu`) es exclusivo de móvil: en
+escritorio (`min-width: 769px`) se fuerza su `display: none !important` y la barra de
+accesos se muestra entera; por debajo de 768 px los accesos se pliegan tras él.
 
 ## ☁️ Despliegue en Vercel
 
